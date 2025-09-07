@@ -1,0 +1,5 @@
+---
+description: arduino工程。核心是esp32驱动42步进电机，进行窗帘的开关。设置模式下，可以设置开关时长
+globs:
+alwaysApply: false
+---
