@@ -36,7 +36,7 @@
  const int TOTAL_STEPS = STEPS_PER_REVOLUTION * MICROSTEPS;  // 3200步/圈
  
 // 速度设置
-int speed = 300;  // 步/秒 (降低速度以获得最大扭矩，防止窗帘打滑)
+int speed = 500;  // 步/秒 (进一步提高速度获得更流畅的转动)
 
 // 窗帘控制时间设置
 int CURTAIN_TIME = 5000;  // 窗帘开关时间 (毫秒) - 可修改
@@ -189,7 +189,7 @@ void loop() {
       Serial.print(speed);
       Serial.print(" 步/秒, 总步数: ");
       Serial.print(totalSteps);
-      Serial.println(" - 最大扭矩模式)");
+      Serial.println(" - 流畅转动模式)");
       lastStatusTime = millis();
     }
     
@@ -232,9 +232,9 @@ void rotateClockwise(int degrees) {
   
   for (int i = 0; i < steps && !stopRequested; i++) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(5);  // 减少脉冲宽度
+    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 5);  // 调整延迟
+    delayMicroseconds(stepDelay - 2);  // 调整延迟
     
     // 每50步检查一次红外信号（减少检查频率提高流畅性）
     if (i % 50 == 0 && IrReceiver.decode()) {
@@ -267,9 +267,9 @@ void rotateCounterClockwise(int degrees) {
   
   for (int i = 0; i < steps && !stopRequested; i++) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(5);  // 减少脉冲宽度
+    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 5);  // 调整延迟
+    delayMicroseconds(stepDelay - 2);  // 调整延迟
     
     // 每50步检查一次红外信号（减少检查频率提高流畅性）
     if (i % 50 == 0 && IrReceiver.decode()) {
@@ -311,9 +311,9 @@ void rotateForTime(int duration, bool clockwise) {
   
   while (millis() - startTime < duration && !stopRequested) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(5);  // 减少脉冲宽度
+    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 5);  // 调整延迟
+    delayMicroseconds(stepDelay - 2);  // 调整延迟
     stepCount++;
     
     // 每2000步打印一次进度（减少打印频率）
@@ -352,13 +352,13 @@ void rotateForTime(int duration, bool clockwise) {
   Serial.println(stopRequested ? "被中断" : "时间到");
 }
  
- // 设置速度
- void setSpeed(int newSpeed) {
-    speed = constrain(newSpeed, 50, 500);  // 限制速度范围，最大扭矩设置
-   Serial.print("速度设置为: ");
-   Serial.print(speed);
-   Serial.println(" 步/秒");
- }
+  // 设置速度
+  void setSpeed(int newSpeed) {
+     speed = constrain(newSpeed, 150, 800);  // 限制速度范围，超流畅转动设置
+    Serial.print("速度设置为: ");
+    Serial.print(speed);
+    Serial.println(" 步/秒");
+  }
  
 // 打印红外命令说明
 void printIRCommands() {
@@ -497,7 +497,7 @@ void handleSetKey() {
     Serial.println("=== 进入设置模式 ===");
     Serial.print("当前转速: ");
     Serial.print(speed);
-    Serial.println(" 步/秒 (最大扭矩设置，与正常使用转速一致)");
+    Serial.println(" 步/秒 (流畅转动设置，与正常使用转速一致)");
     Serial.println("开始计时关闭窗帘，请观察窗帘完全关闭后按设置键停止");
     
     setMode = true;
@@ -623,10 +623,10 @@ void smoothRotate(int steps, bool clockwise) {
   digitalWrite(ENABLE_PIN, LOW);  // 启用电机
   digitalWrite(DIR_PIN, clockwise ? HIGH : LOW);
   
-  const int maxSpeed = 400;   // 最大速度 (步/秒) - 降低以获得更大扭矩
-  const int minSpeed = 100;   // 最小速度 (步/秒) - 降低以获得更大扭矩
-  const int accelSteps = steps / 4;  // 加速步数
-  const int decelSteps = steps / 4;  // 减速步数
+  const int maxSpeed = 600;   // 最大速度 (步/秒) - 进一步提高流畅度
+  const int minSpeed = 200;   // 最小速度 (步/秒) - 进一步提高流畅度
+  const int accelSteps = steps / 2;  // 加速步数 (进一步增加加速距离)
+  const int decelSteps = steps / 2;  // 减速步数 (进一步增加减速距离)
   
   for (int i = 0; i < steps && !stopRequested; i++) {
     // 计算当前速度
@@ -645,9 +645,9 @@ void smoothRotate(int steps, bool clockwise) {
     unsigned long stepDelay = 1000000 / currentSpeed;
     
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(3);  // 更短的脉冲宽度
+    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 3);
+    delayMicroseconds(stepDelay - 2);
     
     // 每100步检查一次红外信号
     if (i % 100 == 0 && IrReceiver.decode()) {
@@ -680,9 +680,9 @@ void testMotor() {
   
   while (millis() - startTime < 1000) {  // 1秒
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(5);  // 减少脉冲宽度
+    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 5);  // 调整延迟
+    delayMicroseconds(stepDelay - 2);  // 调整延迟
     stepCount++;
   }
   
