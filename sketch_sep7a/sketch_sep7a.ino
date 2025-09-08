@@ -19,6 +19,7 @@
  * 右键 (0x6) - 逆时针转动0.8秒
  * 设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间
  * 0键 (0x0) - 停止电机 / 连续3次清除存储
+ * 方向键 (0x1A) - 切换电机转动方向
  */
 
  #include <IRremote.h>
@@ -39,22 +40,25 @@
 int speed = 600;  // 步/秒 (极致流畅转动)
 
 // 窗帘控制时间设置
-int CURTAIN_TIME = 5000;  // 窗帘开关时间 (毫秒) - 可修改
+int CURTAIN_TIME = 8000;  // 窗帘开关时间 (毫秒) - 可修改
 const int DEFAULT_CURTAIN_TIME = 5000;  // 默认窗帘开关时间 (毫秒)
 
 // 左右按键转动时间设置
-const int SIDE_KEY_TIME = 150;  // 左右按键转动时间 (毫秒) - 0.8秒
+const int SIDE_KEY_TIME = 250;  // 左右按键转动时间 (毫秒) - 0.8秒
  
- // 红外命令定义 (基于实际接收到的命令码)
- #define IR_KEY_UP 0x1
- #define IR_KEY_DOWN 0x9
- #define IR_KEY_LEFT 0x4
- #define IR_KEY_RIGHT 0x6
- #define IR_KEY_SHUTDOWN 0x0
- #define IR_KEY_SET 0xE
+// 红外命令定义 (基于实际接收到的命令码)
+#define IR_KEY_UP 0x1  //val+
+#define IR_KEY_DOWN 0x9 //val -
+#define IR_KEY_LEFT 0x4 // <
+#define IR_KEY_RIGHT 0x6 // >
+#define IR_KEY_SHUTDOWN 0x0 //关闭
+#define IR_KEY_SET 0xE //ST/REPT
+#define IR_KEY_DIRECTION 0x1A  // 数字9
 
-//如果发现上下按钮操作反了，改为false/true
-#define DIRECTION_RIGHT false
+// 方向设置（可动态切换）
+// DIRECTION_RIGHT = true: 顺时针为"右转"，逆时针为"左转"
+// DIRECTION_RIGHT = false: 顺时针为"左转"，逆时针为"右转"
+bool DIRECTION_RIGHT = false;  // 默认方向
 
 // 电机状态
 bool motorRunning = false;
@@ -96,6 +100,9 @@ const unsigned long IR_DEBOUNCE_TIME = 200; // 200ms防抖时间
   
   // 读取存储的窗帘时间
   loadCurtainTime();
+  
+  // 读取存储的方向设置
+  loadDirectionSetting();
   
   // 初始化窗帘状态标志位
   isFullyRolledUp = false;
@@ -323,6 +330,11 @@ void rotateCounterClockwise(int degrees) {
 
 // 转动指定时长 (毫秒)
 void rotateForTime(int duration, bool clockwise) {
+  Serial.print("rotateForTime函数接收参数: duration=");
+  Serial.print(duration);
+  Serial.print(", clockwise=");
+  Serial.println(clockwise ? "true" : "false");
+  
   digitalWrite(ENABLE_PIN, LOW);  // 启用电机
   digitalWrite(DIR_PIN, clockwise ? HIGH : LOW);
   
@@ -405,6 +417,7 @@ void printIRCommands() {
   Serial.println("右键 (0x6) - 逆时针转动0.8秒");
   Serial.println("设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间");
   Serial.println("0键 (0x0) - 停止电机 / 连续3次清除存储");
+  Serial.println("方向键 (0x1A) - 切换电机转动方向");
   Serial.println("-------------------");
 }
  
@@ -420,6 +433,8 @@ void handleIRCommand(uint32_t command) {
         break;
       }
       Serial.println("执行: 窗帘卷起");
+      Serial.print("DIRECTION_RIGHT = ");
+      Serial.println(DIRECTION_RIGHT ? "true" : "false");
       rollUpCurtain();
       break;
       
@@ -429,24 +444,67 @@ void handleIRCommand(uint32_t command) {
         break;
       }
       Serial.println("执行: 窗帘放下");
+      Serial.print("DIRECTION_RIGHT = ");
+      Serial.println(DIRECTION_RIGHT ? "true" : "false");
       layDownCurtain();
       break;
       
-    case IR_KEY_LEFT:
-      Serial.println("执行: 顺时针转动0.8秒（丝滑模式）");
+    case IR_KEY_LEFT: {
+      Serial.println("执行: 左转（丝滑模式）");
+      Serial.print("DIRECTION_RIGHT = ");
+      Serial.print(DIRECTION_RIGHT ? "true" : "false");
       // 微调时清零状态标志位
       isFullyRolledUp = false;
       isFullyRolledDown = false;
-      rotateForTime(SIDE_KEY_TIME, (DIRECTION_RIGHT)?false:true);  // 顺时针转动指定时间
-      break;
+      // 左转逻辑：
+      // 当DIRECTION_RIGHT=true时，左转=逆时针=false
+      // 当DIRECTION_RIGHT=false时，左转=顺时针=true
+      Serial.print("左转进入if判断前 DIRECTION_RIGHT = ");
+      Serial.println(DIRECTION_RIGHT ? "true" : "false");
       
-    case IR_KEY_RIGHT:
-      Serial.println("执行: 逆时针转动0.8秒（丝滑模式）");
+      bool leftDirection;
+      if (DIRECTION_RIGHT == true) {
+        Serial.println("左转进入 if (DIRECTION_RIGHT == true) 分支");
+        leftDirection = true;  // 左转=逆时针
+        Serial.println("左转设置 leftDirection = true");
+      } else {
+        Serial.println("左转进入 else 分支");
+        leftDirection = false;   // 左转=顺时针
+        Serial.println("左转设置 leftDirection = false");
+      }
+      Serial.print("左转方向参数: 手动计算 = ");
+      Serial.println(leftDirection ? "true" : "false");
+      rotateForTime(SIDE_KEY_TIME, leftDirection);
+      break;
+    }
+      
+    case IR_KEY_RIGHT: {
+      Serial.println("执行: 右转（丝滑模式）");
+      Serial.print("DIRECTION_RIGHT = ");
+      Serial.print(DIRECTION_RIGHT ? "true" : "false");
       // 微调时清零状态标志位
       isFullyRolledUp = false;
       isFullyRolledDown = false;
-      rotateForTime(SIDE_KEY_TIME, (DIRECTION_RIGHT)?true:false);   // 逆时针转动指定时间
+      // 右转逻辑：
+      Serial.print("右转进入if判断前 DIRECTION_RIGHT = ");
+      Serial.println(DIRECTION_RIGHT ? "true" : "false");
+      
+      bool rightDirection;
+      if (DIRECTION_RIGHT == true) {
+        Serial.println("右转进入 if (DIRECTION_RIGHT == true) 分支");
+        rightDirection = false;   // 右转=顺时针
+        Serial.println("右转设置 rightDirection = false");
+      } else {
+        Serial.println("右转进入 else 分支");
+        rightDirection = true; 
+         // 右转=逆时针
+        Serial.println("右转设置 rightDirection = true");
+      }
+      Serial.print("右转方向参数: 手动计算 = ");
+      Serial.println(rightDirection ? "true" : "false");
+      rotateForTime(SIDE_KEY_TIME, rightDirection);
       break;
+    }
       
     case IR_KEY_SET:
       handleSetKey();
@@ -454,6 +512,10 @@ void handleIRCommand(uint32_t command) {
       
     case IR_KEY_SHUTDOWN:
       handleShutdownKey();
+      break;
+      
+    case IR_KEY_DIRECTION:
+      handleDirectionKey();
       break;
       
     default:
@@ -485,9 +547,25 @@ void rollUpCurtain() {
   
   Serial.print("调用 rotateForTime(");
   Serial.print(CURTAIN_TIME);
-  Serial.println(", true)");
-  // 顺时针转动指定时间，打开窗帘
-  rotateForTime(CURTAIN_TIME, (DIRECTION_RIGHT)?false:true);
+  Serial.print(", ");
+  Serial.print(DIRECTION_RIGHT ? "true" : "false");
+  Serial.println(")");
+  Serial.print("DIRECTION_RIGHT = ");
+  Serial.print(DIRECTION_RIGHT ? "true" : "false");
+  Serial.print(", 传递给rotateForTime的参数 = ");
+  Serial.println(DIRECTION_RIGHT ? "true" : "false");
+  // 卷起窗帘：使用DIRECTION_RIGHT的值
+  bool directionParam;
+  if (DIRECTION_RIGHT == true) {
+    directionParam = true;
+  } else {
+    directionParam = false;
+  }
+  Serial.print("计算方向参数: 手动计算 = ");
+  Serial.println(directionParam ? "true" : "false");
+  Serial.print("DIRECTION_RIGHT当前值: ");
+  Serial.println(DIRECTION_RIGHT ? "true" : "false");
+  rotateForTime(CURTAIN_TIME, directionParam);
   
   Serial.println("rotateForTime 函数返回");
   motorRunning = false;
@@ -511,11 +589,33 @@ void rollUpCurtain() {
 // 放下窗帘
 void layDownCurtain() {
   Serial.println("正在放下窗帘...");
+  Serial.print("DIRECTION_RIGHT = ");
+  Serial.print(DIRECTION_RIGHT ? "true" : "false");
+  Serial.print(", !DIRECTION_RIGHT = ");
+  Serial.println(!DIRECTION_RIGHT ? "true" : "false");
   motorRunning = true;
   stopRequested = false;  // 重置停止标志
   
-  // 逆时针转动指定时间，关闭窗帘
-  rotateForTime(CURTAIN_TIME,DIRECTION_RIGHT?true:false);
+  // 放下窗帘：使用!DIRECTION_RIGHT的值
+  Serial.print("进入if判断前 DIRECTION_RIGHT = ");
+  Serial.println(DIRECTION_RIGHT ? "true" : "false");
+  
+  bool directionParam;
+  if (DIRECTION_RIGHT == true) {
+    Serial.println("进入 if (DIRECTION_RIGHT == true) 分支");
+    directionParam = false;  // 当DIRECTION_RIGHT=true时，放下=逆时针=false
+    Serial.println("设置 directionParam = false");
+  } else {
+    Serial.println("进入 else 分支");
+    directionParam = true;   // 当DIRECTION_RIGHT=false时，放下=顺时针=true
+    Serial.println("设置 directionParam = true");
+  }
+  
+  Serial.print("计算方向参数: 手动计算 = ");
+  Serial.println(directionParam ? "true" : "false");
+  Serial.print("DIRECTION_RIGHT当前值: ");
+  Serial.println(DIRECTION_RIGHT ? "true" : "false");
+  rotateForTime(CURTAIN_TIME, directionParam);
   
   motorRunning = false;
   if (!stopRequested) {
@@ -546,13 +646,28 @@ void handleSetKey() {
     timingInProgress = true;
     timingStart = millis();
     
-     // 开始关闭窗帘
+     // 开始关闭窗帘（放下方向）
      digitalWrite(ENABLE_PIN, LOW);  // 启用电机
-     digitalWrite(DIR_PIN, (DIRECTION_RIGHT)?HIGH:LOW);  // 顺时针
+     Serial.print("设置模式进入if判断前 DIRECTION_RIGHT = ");
+     Serial.println(DIRECTION_RIGHT ? "true" : "false");
+     
+     bool setDirection;
+     if (DIRECTION_RIGHT == true) {
+       Serial.println("设置模式进入 if (DIRECTION_RIGHT == true) 分支");
+       setDirection = false;  // 放下方向=逆时针=LOW
+       Serial.println("设置模式设置 setDirection = false");
+     } else {
+       Serial.println("设置模式进入 else 分支");
+       setDirection = true;   // 放下方向=顺时针=HIGH
+       Serial.println("设置模式设置 setDirection = true");
+     }
+     Serial.print("设置模式方向参数: 手动计算 = ");
+     Serial.println(setDirection ? "true" : "false");
+     digitalWrite(DIR_PIN, setDirection ? HIGH : LOW);  // 放下方向
      motorRunning = true;
     
     Serial.println("设置模式：电机已启动，开始持续转动");
-    Serial.print("方向: 顺时针 (DIR_PIN=HIGH), 转速: ");
+    Serial.print("方向: 放下方向, 转速: ");
     Serial.print(speed);
     Serial.println(" 步/秒");
     
@@ -660,6 +775,54 @@ void clearCurtainTime() {
   Serial.print("已清除存储，恢复默认时间: ");
   Serial.print(CURTAIN_TIME);
   Serial.println(" 毫秒");
+}
+
+// 处理方向切换键
+void handleDirectionKey() {
+  // 切换方向
+  Serial.print("切换前 DIRECTION_RIGHT = ");
+  Serial.println(DIRECTION_RIGHT ? "true" : "false");
+  
+  if (DIRECTION_RIGHT == true) {
+    DIRECTION_RIGHT = false;
+    Serial.println("设置 DIRECTION_RIGHT = false");
+  } else {
+    DIRECTION_RIGHT = true;
+    Serial.println("设置 DIRECTION_RIGHT = true");
+  }
+  
+  Serial.print("切换后 DIRECTION_RIGHT = ");
+  Serial.println(DIRECTION_RIGHT ? "true" : "false");
+  
+  // 保存方向设置
+  saveDirectionSetting();
+  
+  Serial.print("方向已切换为: ");
+  Serial.println(DIRECTION_RIGHT ? "RIGHT模式" : "LEFT模式");
+  Serial.println("新的方向设置已保存到EEPROM");
+}
+
+// 保存方向设置到EEPROM
+void saveDirectionSetting() {
+  EEPROM.begin(512);
+  EEPROM.put(4, DIRECTION_RIGHT);  // 地址4存储方向设置
+  EEPROM.commit();
+  EEPROM.end();
+  Serial.println("方向设置已保存到EEPROM");
+}
+
+// 从EEPROM读取方向设置
+void loadDirectionSetting() {
+  EEPROM.begin(512);
+  bool savedDirection;
+  EEPROM.get(4, savedDirection);
+  EEPROM.end();
+  
+  // 检查读取的值是否有效（bool类型，任何值都有效）
+  DIRECTION_RIGHT = savedDirection;
+  
+  Serial.print("从EEPROM读取方向设置: ");
+  Serial.println(DIRECTION_RIGHT ? "RIGHT模式" : "LEFT模式");
 }
 
 // 超流畅转动函数（专为左右按键优化）
