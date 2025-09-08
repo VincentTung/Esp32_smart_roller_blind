@@ -15,8 +15,8 @@
  * 红外遥控器按键功能 (基于实际命令码):
  * 上键 (0x1) - 打开窗帘 (顺时针转动指定时间)
  * 下键 (0x9) - 关闭窗帘 (逆时针转动指定时间)
- * 左键 (0x4) - 顺时针转动90度
- * 右键 (0x6) - 逆时针转动90度
+ * 左键 (0x4) - 顺时针转动0.8秒
+ * 右键 (0x6) - 逆时针转动0.8秒
  * 设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间
  * 0键 (0x0) - 停止电机 / 连续3次清除存储
  */
@@ -36,11 +36,14 @@
  const int TOTAL_STEPS = STEPS_PER_REVOLUTION * MICROSTEPS;  // 3200步/圈
  
 // 速度设置
-int speed = 500;  // 步/秒 (进一步提高速度获得更流畅的转动)
+int speed = 600;  // 步/秒 (极致流畅转动)
 
 // 窗帘控制时间设置
 int CURTAIN_TIME = 5000;  // 窗帘开关时间 (毫秒) - 可修改
 const int DEFAULT_CURTAIN_TIME = 5000;  // 默认窗帘开关时间 (毫秒)
+
+// 左右按键转动时间设置
+const int SIDE_KEY_TIME = 150;  // 左右按键转动时间 (毫秒) - 0.8秒
  
  // 红外命令定义 (基于实际接收到的命令码)
  #define IR_KEY_UP 0x1
@@ -49,9 +52,17 @@ const int DEFAULT_CURTAIN_TIME = 5000;  // 默认窗帘开关时间 (毫秒)
  #define IR_KEY_RIGHT 0x6
  #define IR_KEY_SHUTDOWN 0x0
  #define IR_KEY_SET 0xE
+
+//如果发现上下按钮操作反了，改为false/true
+#define DIRECTION_RIGHT false
+
 // 电机状态
 bool motorRunning = false;
 bool stopRequested = false;  // 停止请求标志
+
+// 窗帘状态标志位
+bool isFullyRolledUp = false;    // 是否完全卷起
+bool isFullyRolledDown = false;  // 是否完全放下
 
 // 设置模式状态
 bool setMode = false;           // 是否处于设置模式
@@ -86,6 +97,10 @@ const unsigned long IR_DEBOUNCE_TIME = 200; // 200ms防抖时间
   // 读取存储的窗帘时间
   loadCurtainTime();
   
+  // 初始化窗帘状态标志位
+  isFullyRolledUp = false;
+  isFullyRolledDown = false;
+  
   Serial.println("电机已启用，0038k红外接收模块已初始化");
   Serial.println("等待红外命令...");
   printIRCommands();
@@ -112,7 +127,7 @@ void loop() {
     if (setMode) {
       // 设置模式下只处理SET键和SHUT_DOWN键
       if ((command == IR_KEY_SET || command == IR_KEY_SHUTDOWN) && 
-          command != 0 && command != 0xFFFFFFFF && command != 0x0 &&
+          command != 0xFFFFFFFF &&
           address != 0x0 && protocol != 0) {
         
         // 应用防重复机制（设置模式下使用更长的防抖时间）
@@ -142,7 +157,7 @@ void loop() {
     Serial.println(command, HEX);
     
     // 验证信号有效性
-    if (command != 0 && command != 0xFFFFFFFF && command != 0x0) {
+    if (command != 0xFFFFFFFF) {
       // 如果电机正在运行，立即处理停止命令，跳过防重复检查
       if (motorRunning && command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
         Serial.println("电机运行时接收到有效停止命令，立即处理");
@@ -167,13 +182,16 @@ void loop() {
   
   // 检查设置模式下的持续转动
   if (setMode && timingInProgress && motorRunning) {
+    // 确保电机已启用
+    digitalWrite(ENABLE_PIN, LOW);  // 启用电机
+    
     // 设置模式下使用与正常使用相同的转速，确保时间设置准确
     unsigned long stepDelay = 1000000 / speed;
     
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(5);  // 标准脉冲宽度
+    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 5);
+    delayMicroseconds(stepDelay - 1);
     
     // 添加步数计数，用于调试
     static int totalSteps = 0;
@@ -189,7 +207,7 @@ void loop() {
       Serial.print(speed);
       Serial.print(" 步/秒, 总步数: ");
       Serial.print(totalSteps);
-      Serial.println(" - 流畅转动模式)");
+      Serial.println(" - 极致流畅转动模式)");
       lastStatusTime = millis();
     }
     
@@ -220,6 +238,11 @@ void loop() {
   if (!setMode || !timingInProgress) {
     delay(50); // 短暂延迟，避免过度占用CPU
   }
+  
+  // 安全措施：如果不在设置模式且电机应该停止，确保电机被禁用
+  if (!setMode && !motorRunning) {
+    digitalWrite(ENABLE_PIN, HIGH);  // 确保电机被禁用
+  }
 }
  
 // 顺时针转动指定角度
@@ -232,9 +255,9 @@ void rotateClockwise(int degrees) {
   
   for (int i = 0; i < steps && !stopRequested; i++) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
+    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 2);  // 调整延迟
+    delayMicroseconds(stepDelay - 1);  // 调整延迟
     
     // 每50步检查一次红外信号（减少检查频率提高流畅性）
     if (i % 50 == 0 && IrReceiver.decode()) {
@@ -255,8 +278,11 @@ void rotateClockwise(int degrees) {
   
   // 重置停止请求标志
   stopRequested = false;
+  
+  // 确保电机被禁用
+  digitalWrite(ENABLE_PIN, HIGH);
 }
- 
+
 // 逆时针转动指定角度
 void rotateCounterClockwise(int degrees) {
   digitalWrite(ENABLE_PIN, LOW);  // 启用电机
@@ -267,9 +293,9 @@ void rotateCounterClockwise(int degrees) {
   
   for (int i = 0; i < steps && !stopRequested; i++) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
+    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 2);  // 调整延迟
+    delayMicroseconds(stepDelay - 1);  // 调整延迟
     
     // 每50步检查一次红外信号（减少检查频率提高流畅性）
     if (i % 50 == 0 && IrReceiver.decode()) {
@@ -290,8 +316,11 @@ void rotateCounterClockwise(int degrees) {
   
   // 重置停止请求标志
   stopRequested = false;
+  
+  // 确保电机被禁用
+  digitalWrite(ENABLE_PIN, HIGH);
 }
- 
+
 // 转动指定时长 (毫秒)
 void rotateForTime(int duration, bool clockwise) {
   digitalWrite(ENABLE_PIN, LOW);  // 启用电机
@@ -311,9 +340,9 @@ void rotateForTime(int duration, bool clockwise) {
   
   while (millis() - startTime < duration && !stopRequested) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
+    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 2);  // 调整延迟
+    delayMicroseconds(stepDelay - 1);  // 调整延迟
     stepCount++;
     
     // 每2000步打印一次进度（减少打印频率）
@@ -350,11 +379,14 @@ void rotateForTime(int duration, bool clockwise) {
   Serial.print(actualDuration);
   Serial.print(" 毫秒，停止原因: ");
   Serial.println(stopRequested ? "被中断" : "时间到");
+  
+  // 确保电机被禁用
+  digitalWrite(ENABLE_PIN, HIGH);
 }
- 
-  // 设置速度
+
+// 设置速度
   void setSpeed(int newSpeed) {
-     speed = constrain(newSpeed, 150, 800);  // 限制速度范围，超流畅转动设置
+     speed = constrain(newSpeed, 200, 1000);  // 限制速度范围，极致流畅转动设置
     Serial.print("速度设置为: ");
     Serial.print(speed);
     Serial.println(" 步/秒");
@@ -369,8 +401,8 @@ void printIRCommands() {
   Serial.print("下键 (0x9) - 窗帘放下");
   Serial.print(CURTAIN_TIME);
   Serial.println("毫秒)");
-  Serial.println("左键 (0x4) - 窗帘卷起转动45度");
-  Serial.println("右键 (0x6) - 窗帘放下转动45度");
+  Serial.println("左键 (0x4) - 顺时针转动0.8秒");
+  Serial.println("右键 (0x6) - 逆时针转动0.8秒");
   Serial.println("设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间");
   Serial.println("0键 (0x0) - 停止电机 / 连续3次清除存储");
   Serial.println("-------------------");
@@ -383,31 +415,37 @@ void handleIRCommand(uint32_t command) {
   
   switch (command) {
     case IR_KEY_UP:
+      if (isFullyRolledUp) {
+        Serial.println("窗帘已经完全卷起，停止动作");
+        break;
+      }
       Serial.println("执行: 窗帘卷起");
       rollUpCurtain();
       break;
       
     case IR_KEY_DOWN:
+      if (isFullyRolledDown) {
+        Serial.println("窗帘已经完全放下，无响应");
+        break;
+      }
       Serial.println("执行: 窗帘放下");
-  
       layDownCurtain();
       break;
       
     case IR_KEY_LEFT:
-      Serial.println("执行: 顺时针转动45度（流畅模式）");
-      {
-        int steps = (45 * TOTAL_STEPS) / 360;
-        smoothRotate(steps, false);
-      }
+      Serial.println("执行: 顺时针转动0.8秒（丝滑模式）");
+      // 微调时清零状态标志位
+      isFullyRolledUp = false;
+      isFullyRolledDown = false;
+      rotateForTime(SIDE_KEY_TIME, (DIRECTION_RIGHT)?false:true);  // 顺时针转动指定时间
       break;
       
     case IR_KEY_RIGHT:
-      Serial.println("执行: 逆时针转动45度（流畅模式）");
-     
-      {
-        int steps = (45 * TOTAL_STEPS) / 360;
-        smoothRotate(steps, true);
-      }
+      Serial.println("执行: 逆时针转动0.8秒（丝滑模式）");
+      // 微调时清零状态标志位
+      isFullyRolledUp = false;
+      isFullyRolledDown = false;
+      rotateForTime(SIDE_KEY_TIME, (DIRECTION_RIGHT)?true:false);   // 逆时针转动指定时间
       break;
       
     case IR_KEY_SET:
@@ -449,7 +487,7 @@ void rollUpCurtain() {
   Serial.print(CURTAIN_TIME);
   Serial.println(", true)");
   // 顺时针转动指定时间，打开窗帘
-  rotateForTime(CURTAIN_TIME, false);
+  rotateForTime(CURTAIN_TIME, (DIRECTION_RIGHT)?false:true);
   
   Serial.println("rotateForTime 函数返回");
   motorRunning = false;
@@ -459,6 +497,8 @@ void rollUpCurtain() {
   
   if (!stopRequested) {
     Serial.println("窗帘已卷起");
+    isFullyRolledUp = true;    // 设置完全卷起状态
+    isFullyRolledDown = false; // 清除完全放下状态
   } else {
     Serial.println("窗帘卷起被中断");
   }
@@ -475,11 +515,13 @@ void layDownCurtain() {
   stopRequested = false;  // 重置停止标志
   
   // 逆时针转动指定时间，关闭窗帘
-  rotateForTime(CURTAIN_TIME, true);
+  rotateForTime(CURTAIN_TIME,DIRECTION_RIGHT?true:false);
   
   motorRunning = false;
   if (!stopRequested) {
     Serial.println("窗帘已放下");
+    isFullyRolledDown = true;  // 设置完全放下状态
+    isFullyRolledUp = false;   // 清除完全卷起状态
   } else {
     Serial.println("窗帘放下被中断");
   }
@@ -497,7 +539,7 @@ void handleSetKey() {
     Serial.println("=== 进入设置模式 ===");
     Serial.print("当前转速: ");
     Serial.print(speed);
-    Serial.println(" 步/秒 (流畅转动设置，与正常使用转速一致)");
+    Serial.println(" 步/秒 (极致流畅转动设置，与正常使用转速一致)");
     Serial.println("开始计时关闭窗帘，请观察窗帘完全关闭后按设置键停止");
     
     setMode = true;
@@ -506,7 +548,7 @@ void handleSetKey() {
     
      // 开始关闭窗帘
      digitalWrite(ENABLE_PIN, LOW);  // 启用电机
-     digitalWrite(DIR_PIN, HIGH);  // 顺时针
+     digitalWrite(DIR_PIN, (DIRECTION_RIGHT)?HIGH:LOW);  // 顺时针
      motorRunning = true;
     
     Serial.println("设置模式：电机已启动，开始持续转动");
@@ -521,16 +563,18 @@ void handleSetKey() {
     Serial.print("计时结束，窗帘关闭时间: ");
     Serial.print(duration);
     Serial.println(" 毫秒");
-    
+
      // 停止电机
      digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
      motorRunning = false;
      timingInProgress = false;
+     Serial.println("窗帘完全放下..");
     
     // 保存时间
     CURTAIN_TIME = duration;
     saveCurtainTime();
-    
+    isFullyRolledDown = true;  // 设置完全放下状态
+    isFullyRolledUp = false;  
     // 退出设置模式
     setMode = false;
     Serial.println("=== 退出设置模式 ===");
@@ -544,15 +588,15 @@ void handleSetKey() {
 void handleShutdownKey() {
   unsigned long currentTime = millis();
   
-   // 检查是否在设置模式
-   if (setMode) {
-     Serial.println("设置模式下按关机键，退出设置模式");
-     digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
-     setMode = false;
-     timingInProgress = false;
-     motorRunning = false;
-     return;
-   }
+  // 检查是否在设置模式
+  if (setMode) {
+    Serial.println("设置模式下按关机键，退出设置模式");
+    digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
+    setMode = false;
+    timingInProgress = false;
+    motorRunning = false;
+    return;
+  }
   
   // 检查连续按键
   if (currentTime - lastShutdownTime < 2000) { // 2秒内
@@ -618,34 +662,103 @@ void clearCurtainTime() {
   Serial.println(" 毫秒");
 }
 
-// 流畅转动函数（带加速减速）
-void smoothRotate(int steps, bool clockwise) {
+// 超流畅转动函数（专为左右按键优化）
+void ultraSmoothRotate(int steps, bool clockwise) {
   digitalWrite(ENABLE_PIN, LOW);  // 启用电机
   digitalWrite(DIR_PIN, clockwise ? HIGH : LOW);
   
-  const int maxSpeed = 600;   // 最大速度 (步/秒) - 进一步提高流畅度
-  const int minSpeed = 200;   // 最小速度 (步/秒) - 进一步提高流畅度
-  const int accelSteps = steps / 2;  // 加速步数 (进一步增加加速距离)
-  const int decelSteps = steps / 2;  // 减速步数 (进一步增加减速距离)
+  const int maxSpeed = 1000;  // 最大速度 (步/秒) - 超高速
+  const int minSpeed = 200;   // 最小速度 (步/秒) - 平滑启动
+  const int accelSteps = (steps * 3) / 4;  // 加速步数 (75%用于加速)
+  const int decelSteps = (steps * 3) / 4;  // 减速步数 (75%用于减速)
   
   for (int i = 0; i < steps && !stopRequested; i++) {
-    // 计算当前速度
+    // 计算当前速度 - 使用更平滑的S型曲线
     int currentSpeed;
     if (i < accelSteps) {
-      // 加速阶段
-      currentSpeed = minSpeed + (maxSpeed - minSpeed) * i / accelSteps;
+      // 加速阶段 - 改进的S型曲线
+      float progress = (float)i / accelSteps;
+      float sCurve = 6 * progress * progress * progress * progress * progress - 
+                     15 * progress * progress * progress * progress + 
+                     10 * progress * progress * progress; // 更平滑的S型曲线
+      currentSpeed = minSpeed + (maxSpeed - minSpeed) * sCurve;
     } else if (i >= steps - decelSteps) {
-      // 减速阶段
-      currentSpeed = minSpeed + (maxSpeed - minSpeed) * (steps - i) / decelSteps;
+      // 减速阶段 - 改进的S型曲线
+      float progress = (float)(steps - i) / decelSteps;
+      float sCurve = 6 * progress * progress * progress * progress * progress - 
+                     15 * progress * progress * progress * progress + 
+                     10 * progress * progress * progress; // 更平滑的S型曲线
+      currentSpeed = minSpeed + (maxSpeed - minSpeed) * sCurve;
     } else {
-      // 匀速阶段
+      // 匀速阶段 - 极短时间
       currentSpeed = maxSpeed;
     }
     
     unsigned long stepDelay = 1000000 / currentSpeed;
     
+    // 确保最小延迟，避免过快导致声音
+    if (stepDelay < 2000) stepDelay = 2000; // 最小2ms延迟
+    
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
+    delayMicroseconds(2);  // 稍微增加脉冲宽度，减少声音
+    digitalWrite(STEP_PIN, LOW);
+    delayMicroseconds(stepDelay - 2);
+    
+    // 每500步检查一次红外信号（大幅减少检查频率提高流畅性）
+    if (i % 500 == 0 && IrReceiver.decode()) {
+      uint32_t command = IrReceiver.decodedIRData.command;
+      uint32_t address = IrReceiver.decodedIRData.address;
+      uint8_t protocol = IrReceiver.decodedIRData.protocol;
+      
+      if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
+        Serial.println("超流畅旋转过程中接收到有效停止信号，立即停止");
+        stopRequested = true;
+        IrReceiver.resume();
+        break;
+      }
+      IrReceiver.resume();
+    }
+  }
+  
+  stopRequested = false;
+  
+  // 确保电机被禁用
+  digitalWrite(ENABLE_PIN, HIGH);
+}
+
+// 流畅转动函数（带加速减速）
+void smoothRotate(int steps, bool clockwise) {
+  digitalWrite(ENABLE_PIN, LOW);  // 启用电机
+  digitalWrite(DIR_PIN, clockwise ? HIGH : LOW);
+  
+  const int maxSpeed = 500;   // 最大速度 (步/秒) - 降低速度减少声音
+  const int minSpeed = 100;   // 最小速度 (步/秒) - 降低速度减少声音
+  const int accelSteps = steps;  // 加速步数 (100%用于加速，无匀速段)
+  const int decelSteps = steps;  // 减速步数 (100%用于减速，无匀速段)
+  
+  for (int i = 0; i < steps && !stopRequested; i++) {
+    // 计算当前速度 - 使用更平滑的曲线，消除顿挫感
+    int currentSpeed;
+    
+    // 计算在整个转动过程中的进度 (0.0 到 1.0)
+    float progress = (float)i / steps;
+    
+    if (progress <= 0.5) {
+      // 前半段：加速阶段
+      float accelProgress = progress * 2.0; // 0.0 到 1.0
+      float sCurve = 3 * accelProgress * accelProgress - 2 * accelProgress * accelProgress * accelProgress;
+      currentSpeed = minSpeed + (maxSpeed - minSpeed) * sCurve;
+    } else {
+      // 后半段：减速阶段
+      float decelProgress = (progress - 0.5) * 2.0; // 0.0 到 1.0
+      float sCurve = 3 * decelProgress * decelProgress - 2 * decelProgress * decelProgress * decelProgress;
+      currentSpeed = maxSpeed - (maxSpeed - minSpeed) * sCurve;
+    }
+    
+    unsigned long stepDelay = 1000000 / currentSpeed;
+    
+    digitalWrite(STEP_PIN, HIGH);
+    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
     digitalWrite(STEP_PIN, LOW);
     delayMicroseconds(stepDelay - 2);
     
@@ -666,6 +779,9 @@ void smoothRotate(int steps, bool clockwise) {
   }
   
   stopRequested = false;
+  
+  // 确保电机被禁用
+  digitalWrite(ENABLE_PIN, HIGH);
 }
 
 // 简单电机测试函数
@@ -680,9 +796,9 @@ void testMotor() {
   
   while (millis() - startTime < 1000) {  // 1秒
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(2);  // 更短的脉冲宽度，更流畅
+    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
     digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 2);  // 调整延迟
+    delayMicroseconds(stepDelay - 1);  // 调整延迟
     stepCount++;
   }
   
