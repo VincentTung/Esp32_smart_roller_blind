@@ -18,8 +18,8 @@
  * 左键 (0x4) - 顺时针转动0.8秒
  * 右键 (0x6) - 逆时针转动0.8秒
  * 设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间
- * 0键 (0x0) - 停止电机 / 连续3次清除存储
- * 方向键 (0x1A) - 切换电机转动方向
+ * 关闭键 (0x0) - 停止电机 / 连续3次清除存储
+ *  0键  (0x1A) - 切换电机转动方向
  */
 
  #include <IRremote.h>
@@ -37,7 +37,7 @@
  const int TOTAL_STEPS = STEPS_PER_REVOLUTION * MICROSTEPS;  // 3200步/圈
  
 // 速度设置
-int speed = 600;  // 步/秒 (极致流畅转动)
+int speed = 600;  // 步/秒 (流畅转动)
 
 // 窗帘控制时间设置
 int CURTAIN_TIME = 8000;  // 窗帘开关时间 (毫秒) - 可修改
@@ -47,12 +47,12 @@ const int DEFAULT_CURTAIN_TIME = 5000;  // 默认窗帘开关时间 (毫秒)
 const int SIDE_KEY_TIME = 250;  // 左右按键转动时间 (毫秒) - 0.8秒
  
 // 红外命令定义 (基于实际接收到的命令码)
-#define IR_KEY_UP 0x1  //val+
-#define IR_KEY_DOWN 0x9 //val -
+#define IR_KEY_UP 0x1  // val+
+#define IR_KEY_DOWN 0x9 // val-
 #define IR_KEY_LEFT 0x4 // <
 #define IR_KEY_RIGHT 0x6 // >
-#define IR_KEY_SHUTDOWN 0x0 //关闭
-#define IR_KEY_SET 0xE //ST/REPT
+#define IR_KEY_SHUTDOWN 0x0  //关闭
+#define IR_KEY_SET 0xE //   ST/REPT
 #define IR_KEY_DIRECTION 0x1A  // 数字9
 
 // 方向设置（可动态切换）
@@ -114,12 +114,7 @@ const unsigned long IR_DEBOUNCE_TIME = 200; // 200ms防抖时间
    
   // 测试0038k红外接收模块
   Serial.println("正在测试0038k红外接收模块...");
-  delay(1000);
-  
-  // 测试电机
-  Serial.println("开始电机测试...");
-  // testMotor();
-  delay(2000);
+
  }
  
 void loop() {
@@ -196,7 +191,7 @@ void loop() {
     unsigned long stepDelay = 1000000 / speed;
     
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
+    delayMicroseconds(1);  // 极短脉冲宽度，流畅
     digitalWrite(STEP_PIN, LOW);
     delayMicroseconds(stepDelay - 1);
     
@@ -214,7 +209,7 @@ void loop() {
       Serial.print(speed);
       Serial.print(" 步/秒, 总步数: ");
       Serial.print(totalSteps);
-      Serial.println(" - 极致流畅转动模式)");
+      Serial.println(" - 流畅转动模式)");
       lastStatusTime = millis();
     }
     
@@ -262,7 +257,7 @@ void rotateClockwise(int degrees) {
   
   for (int i = 0; i < steps && !stopRequested; i++) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
+    delayMicroseconds(1);  // 极短脉冲宽度，流畅
     digitalWrite(STEP_PIN, LOW);
     delayMicroseconds(stepDelay - 1);  // 调整延迟
     
@@ -300,7 +295,7 @@ void rotateCounterClockwise(int degrees) {
   
   for (int i = 0; i < steps && !stopRequested; i++) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
+    delayMicroseconds(1);  // 极短脉冲宽度，流畅
     digitalWrite(STEP_PIN, LOW);
     delayMicroseconds(stepDelay - 1);  // 调整延迟
     
@@ -352,7 +347,7 @@ void rotateForTime(int duration, bool clockwise) {
   
   while (millis() - startTime < duration && !stopRequested) {
     digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
+    delayMicroseconds(1);  // 极短脉冲宽度，流畅
     digitalWrite(STEP_PIN, LOW);
     delayMicroseconds(stepDelay - 1);  // 调整延迟
     stepCount++;
@@ -398,7 +393,7 @@ void rotateForTime(int duration, bool clockwise) {
 
 // 设置速度
   void setSpeed(int newSpeed) {
-     speed = constrain(newSpeed, 200, 1000);  // 限制速度范围，极致流畅转动设置
+     speed = constrain(newSpeed, 200, 1000);  // 限制速度范围，流畅转动设置
     Serial.print("速度设置为: ");
     Serial.print(speed);
     Serial.println(" 步/秒");
@@ -639,7 +634,7 @@ void handleSetKey() {
     Serial.println("=== 进入设置模式 ===");
     Serial.print("当前转速: ");
     Serial.print(speed);
-    Serial.println(" 步/秒 (极致流畅转动设置，与正常使用转速一致)");
+    Serial.println(" 步/秒 (流畅转动设置，与正常使用转速一致)");
     Serial.println("开始计时关闭窗帘，请观察窗帘完全关闭后按设置键停止");
     
     setMode = true;
@@ -825,163 +820,3 @@ void loadDirectionSetting() {
   Serial.println(DIRECTION_RIGHT ? "RIGHT模式" : "LEFT模式");
 }
 
-// 超流畅转动函数（专为左右按键优化）
-void ultraSmoothRotate(int steps, bool clockwise) {
-  digitalWrite(ENABLE_PIN, LOW);  // 启用电机
-  digitalWrite(DIR_PIN, clockwise ? HIGH : LOW);
-  
-  const int maxSpeed = 1000;  // 最大速度 (步/秒) - 超高速
-  const int minSpeed = 200;   // 最小速度 (步/秒) - 平滑启动
-  const int accelSteps = (steps * 3) / 4;  // 加速步数 (75%用于加速)
-  const int decelSteps = (steps * 3) / 4;  // 减速步数 (75%用于减速)
-  
-  for (int i = 0; i < steps && !stopRequested; i++) {
-    // 计算当前速度 - 使用更平滑的S型曲线
-    int currentSpeed;
-    if (i < accelSteps) {
-      // 加速阶段 - 改进的S型曲线
-      float progress = (float)i / accelSteps;
-      float sCurve = 6 * progress * progress * progress * progress * progress - 
-                     15 * progress * progress * progress * progress + 
-                     10 * progress * progress * progress; // 更平滑的S型曲线
-      currentSpeed = minSpeed + (maxSpeed - minSpeed) * sCurve;
-    } else if (i >= steps - decelSteps) {
-      // 减速阶段 - 改进的S型曲线
-      float progress = (float)(steps - i) / decelSteps;
-      float sCurve = 6 * progress * progress * progress * progress * progress - 
-                     15 * progress * progress * progress * progress + 
-                     10 * progress * progress * progress; // 更平滑的S型曲线
-      currentSpeed = minSpeed + (maxSpeed - minSpeed) * sCurve;
-    } else {
-      // 匀速阶段 - 极短时间
-      currentSpeed = maxSpeed;
-    }
-    
-    unsigned long stepDelay = 1000000 / currentSpeed;
-    
-    // 确保最小延迟，避免过快导致声音
-    if (stepDelay < 2000) stepDelay = 2000; // 最小2ms延迟
-    
-    digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(2);  // 稍微增加脉冲宽度，减少声音
-    digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 2);
-    
-    // 每500步检查一次红外信号（大幅减少检查频率提高流畅性）
-    if (i % 500 == 0 && IrReceiver.decode()) {
-      uint32_t command = IrReceiver.decodedIRData.command;
-      uint32_t address = IrReceiver.decodedIRData.address;
-      uint8_t protocol = IrReceiver.decodedIRData.protocol;
-      
-      if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
-        Serial.println("超流畅旋转过程中接收到有效停止信号，立即停止");
-        stopRequested = true;
-        IrReceiver.resume();
-        break;
-      }
-      IrReceiver.resume();
-    }
-  }
-  
-  stopRequested = false;
-  
-  // 确保电机被禁用
-  digitalWrite(ENABLE_PIN, HIGH);
-}
-
-// 流畅转动函数（带加速减速）
-void smoothRotate(int steps, bool clockwise) {
-  digitalWrite(ENABLE_PIN, LOW);  // 启用电机
-  digitalWrite(DIR_PIN, clockwise ? HIGH : LOW);
-  
-  const int maxSpeed = 500;   // 最大速度 (步/秒) - 降低速度减少声音
-  const int minSpeed = 100;   // 最小速度 (步/秒) - 降低速度减少声音
-  const int accelSteps = steps;  // 加速步数 (100%用于加速，无匀速段)
-  const int decelSteps = steps;  // 减速步数 (100%用于减速，无匀速段)
-  
-  for (int i = 0; i < steps && !stopRequested; i++) {
-    // 计算当前速度 - 使用更平滑的曲线，消除顿挫感
-    int currentSpeed;
-    
-    // 计算在整个转动过程中的进度 (0.0 到 1.0)
-    float progress = (float)i / steps;
-    
-    if (progress <= 0.5) {
-      // 前半段：加速阶段
-      float accelProgress = progress * 2.0; // 0.0 到 1.0
-      float sCurve = 3 * accelProgress * accelProgress - 2 * accelProgress * accelProgress * accelProgress;
-      currentSpeed = minSpeed + (maxSpeed - minSpeed) * sCurve;
-    } else {
-      // 后半段：减速阶段
-      float decelProgress = (progress - 0.5) * 2.0; // 0.0 到 1.0
-      float sCurve = 3 * decelProgress * decelProgress - 2 * decelProgress * decelProgress * decelProgress;
-      currentSpeed = maxSpeed - (maxSpeed - minSpeed) * sCurve;
-    }
-    
-    unsigned long stepDelay = 1000000 / currentSpeed;
-    
-    digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
-    digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 2);
-    
-    // 每100步检查一次红外信号
-    if (i % 100 == 0 && IrReceiver.decode()) {
-      uint32_t command = IrReceiver.decodedIRData.command;
-      uint32_t address = IrReceiver.decodedIRData.address;
-      uint8_t protocol = IrReceiver.decodedIRData.protocol;
-      
-      if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
-        Serial.println("流畅旋转过程中接收到有效停止信号，立即停止");
-        stopRequested = true;
-        IrReceiver.resume();
-        break;
-      }
-      IrReceiver.resume();
-    }
-  }
-  
-  stopRequested = false;
-  
-  // 确保电机被禁用
-  digitalWrite(ENABLE_PIN, HIGH);
-}
-
-// 简单电机测试函数
-void testMotor() {
-  Serial.println("=== 电机测试开始 ===");
-  Serial.println("测试顺时针转动1秒...");
-  
-  digitalWrite(DIR_PIN, HIGH);  // 顺时针
-  unsigned long startTime = millis();
-  int stepCount = 0;
-  unsigned long stepDelay = 1000000 / speed;
-  
-  while (millis() - startTime < 1000) {  // 1秒
-    digitalWrite(STEP_PIN, HIGH);
-    delayMicroseconds(1);  // 极短脉冲宽度，极致流畅
-    digitalWrite(STEP_PIN, LOW);
-    delayMicroseconds(stepDelay - 1);  // 调整延迟
-    stepCount++;
-  }
-  
-  Serial.print("1秒内执行了 ");
-  Serial.print(stepCount);
-  Serial.println(" 步");
-  Serial.println("=== 电机测试完成 ===");
-}
-
-// 调试红外接收（可选使用）
-void debugIRReceiver() {
-  if (IrReceiver.decode()) {
-    Serial.print("原始数据 - 协议: ");
-    Serial.print(IrReceiver.decodedIRData.protocol);
-    Serial.print(", 地址: 0x");
-    Serial.print(IrReceiver.decodedIRData.address, HEX);
-    Serial.print(", 命令: 0x");
-    Serial.print(IrReceiver.decodedIRData.command, HEX);
-    Serial.print(", 重复: ");
-    Serial.println(IrReceiver.decodedIRData.flags & IRDATA_FLAGS_IS_REPEAT ? "是" : "否");
-    IrReceiver.resume();
-  }
-}
