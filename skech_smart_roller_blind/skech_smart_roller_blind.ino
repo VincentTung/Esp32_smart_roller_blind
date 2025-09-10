@@ -13,24 +13,19 @@
  * 12V电源GND    -> A4988 GND
  * 
  * 红外遥控器按键功能 (基于实际命令码):
- * 上键 (0x1) - 打开窗帘 (默认:逆时针转动指定时间)
- * 下键 (0x9) - 关闭窗帘 (默认:顺时针时针转动指定时间)
- * 左键 (0x4) - 默认:逆时针转动0.8秒
- * 右键 (0x6) - 默认:顺时针转动0.8秒
+ * 上键 (0x1) - 升起窗帘 (默认:逆时针转动指定时间)
+ * 下键 (0x9) - 放下窗帘 (默认:顺时针时针转动指定时间)
+ * 左键 (0x4) - 默认:升起窗帘(微调)
+ * 右键 (0x6) - 默认:放下转动(微调)
  * 设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间
- * 关闭键 (0x0) - 停止电机 / 连续3次清除存储
+ * 关闭键 (0x5) - 停止电机 / 连续3次清除存储
  *  0键  (0x1A) - 切换电机转动方向
  */
-
+#include "config.h"
  #include <IRremote.h>
 #include <EEPROM.h>
 
- // 引脚定义
- #define STEP_PIN 16
- #define DIR_PIN 17
- #define ENABLE_PIN 18
- #define IR_RECEIVE_PIN 19
- 
+
  // 电机参数
  const int STEPS_PER_REVOLUTION = 200;  // 42步进电机全步进
  const int MICROSTEPS = 16;  // 1/16微步进
@@ -40,20 +35,8 @@
 int speed = 600;  // 步/秒 (流畅转动)
 
 // 窗帘控制时间设置
-int CURTAIN_TIME = 8000;  // 窗帘开关时间 (毫秒) - 可修改
-const int DEFAULT_CURTAIN_TIME = 5000;  // 默认窗帘开关时间 (毫秒)
+int CURTAIN_TIME = DEFAULT_CURTAIN_TIME;  // 窗帘开关时间 (毫秒) - 可修改
 
-// 左右按键转动时间设置
-const int SIDE_KEY_TIME = 250;  // 左右按键转动时间 (毫秒) - 0.8秒
- 
-// 红外命令定义 (基于实际接收到的命令码)
-#define IR_KEY_UP 0x1  // val+
-#define IR_KEY_DOWN 0x9 // val-
-#define IR_KEY_LEFT 0x4 // <
-#define IR_KEY_RIGHT 0x6 // >
-#define IR_KEY_SHUTDOWN 0x0  //关闭
-#define IR_KEY_SET 0xE //   ST/REPT
-#define IR_KEY_DIRECTION 0x1A  // 数字9
 
 // 方向设置（可动态切换）
 //  DIRECTION_RIGHT = true: 顺时针为"左转"，逆时针为"右转" 
@@ -120,9 +103,22 @@ const unsigned long IR_DEBOUNCE_TIME = 200; // 200ms防抖时间
 void loop() {
   // 检查红外信号（设置模式下减少处理频率）
   if (IrReceiver.decode()) {
-    uint32_t command = IrReceiver.decodedIRData.command;
+
     uint32_t address = IrReceiver.decodedIRData.address;
+    uint32_t command = IrReceiver.decodedIRData.command;
     uint8_t protocol = IrReceiver.decodedIRData.protocol;
+    // 显示接收到的原始数据（用于调试）
+    Serial.print("0038k接收 - 协议:");
+    Serial.print(protocol);
+    Serial.print(" 地址:0x");
+    Serial.print(address, HEX);
+    Serial.print(" 命令:0x");
+    Serial.println(command, HEX);
+    if(address != IR_ADDRESS){
+       IrReceiver.resume();
+       return;
+    }
+
     unsigned long currentTime = millis();
     
     // 在设置模式下，只处理关键命令，减少干扰
@@ -149,15 +145,8 @@ void loop() {
       return;
     }
     
+
     // 非设置模式下的正常处理
-    // 显示接收到的原始数据（用于调试）
-    Serial.print("0038k接收 - 协议:");
-    Serial.print(protocol);
-    Serial.print(" 地址:0x");
-    Serial.print(address, HEX);
-    Serial.print(" 命令:0x");
-    Serial.println(command, HEX);
-    
     // 验证信号有效性
     if (command != 0xFFFFFFFF) {
       // 如果电机正在运行，立即处理停止命令，跳过防重复检查
@@ -430,6 +419,8 @@ void handleIRCommand(uint32_t command) {
       Serial.println("执行: 窗帘卷起");
       Serial.print("DIRECTION_RIGHT = ");
       Serial.println(DIRECTION_RIGHT ? "true" : "false");
+      isFullyRolledDown = false;
+      isFullyRolledUp = false;
       rollUpCurtain();
       break;
       
@@ -438,6 +429,8 @@ void handleIRCommand(uint32_t command) {
         Serial.println("窗帘已经完全放下，无响应");
         break;
       }
+      isFullyRolledDown = false;
+      isFullyRolledUp = false;
       Serial.println("执行: 窗帘放下");
       Serial.print("DIRECTION_RIGHT = ");
       Serial.println(DIRECTION_RIGHT ? "true" : "false");
