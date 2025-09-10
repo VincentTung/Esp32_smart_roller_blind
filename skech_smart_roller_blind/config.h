@@ -3,11 +3,11 @@
 
  // 引脚定义
  // 42步进电机
- #define STEP_PIN 16
- #define DIR_PIN 17
- #define ENABLE_PIN 18
+ #define STEP_PIN 6
+ #define DIR_PIN 7
+ #define ENABLE_PIN 8
  //红外
- #define IR_RECEIVE_PIN 19
+ #define IR_RECEIVE_PIN 9
  
 //红外地址  （根据实际接收到的地址修改）
 #define IR_ADDRESS  0xBF00

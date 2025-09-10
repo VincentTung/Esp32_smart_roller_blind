@@ -62,7 +62,7 @@ unsigned long lastIRTime = 0;
 const unsigned long IR_DEBOUNCE_TIME = 200; // 200ms防抖时间
  
  void setup() {
-   Serial.begin(115200);
+   Serial.begin(9600);
    Serial.println("ESP32 + A4988 步进电机 + 红外控制");
    
    // 设置引脚
@@ -363,6 +363,7 @@ void handleIRCommand(uint32_t command) {
       // 微调时清零状态标志位
       isFullyRolledUp = false;
       isFullyRolledDown = false;
+      stopRequested = false;  // 重置停止标志
       // 微调升起逻辑：
       // 当isNormalDirection=true时，微调升起=逆时针=false
       // 当isNormalDirection=false时，微调升起=顺时针=true
@@ -392,6 +393,7 @@ void handleIRCommand(uint32_t command) {
       // 微调时清零状态标志位
       isFullyRolledUp = false;
       isFullyRolledDown = false;
+      stopRequested = false;  // 重置停止标志
       // 微调放下逻辑：
       Serial.print("微调放下进入if判断前 isNormalDirection = ");
       Serial.println(isNormalDirection ? "true" : "false");
