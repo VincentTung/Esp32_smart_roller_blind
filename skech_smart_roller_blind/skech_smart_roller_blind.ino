@@ -56,7 +56,7 @@ const int SIDE_KEY_TIME = 250;  // 左右按键转动时间 (毫秒) - 0.8秒
 #define IR_KEY_DIRECTION 0x1A  // 数字9
 
 // 方向设置（可动态切换）
-// DIRECTION_RIGHT = true: 顺时针为"左转"，逆时针为"右转" 
+//  DIRECTION_RIGHT = true: 顺时针为"左转"，逆时针为"右转" 
 // DIRECTION_RIGHT = false: 顺时针为"右转"，逆时针为"左转"
 bool DIRECTION_RIGHT = false;  // 默认方向
 
