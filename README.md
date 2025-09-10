@@ -75,7 +75,8 @@ ESP32 GND     -> A4988 GND, 红外接收模块 GND
 ```
 
 ## 🛠️ 3D打印
-
+注意 3D模型来自 https://printables.com/model/1328338-high-torque-motorised-roller-blinds-mount
+感谢作者Tmate，请尊重模型的版权。
 项目包含完整的3D打印文件：
 - `gear.stl` - 齿轮
 - `mount.stl` - 支架
