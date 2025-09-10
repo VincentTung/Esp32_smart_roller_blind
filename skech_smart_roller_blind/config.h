@@ -2,9 +2,11 @@
 #define CONFIG_H
 
  // 引脚定义
+ // 42步进电机
  #define STEP_PIN 16
  #define DIR_PIN 17
  #define ENABLE_PIN 18
+ //红外
  #define IR_RECEIVE_PIN 19
  
 //红外地址  （根据实际接收到的地址修改）
@@ -22,4 +24,6 @@
 const int DEFAULT_CURTAIN_TIME = 5000;  // 默认窗帘开关时间 (毫秒)
 // 左右按键转动时间设置 
 const int SIDE_KEY_TIME = 1000;  // 左右按键转动时间 (毫秒) 上下微调响应参数调这个
+
+const int DEFAULT_IS_NORMAL_DIRECTION = true;
 #endif // 
