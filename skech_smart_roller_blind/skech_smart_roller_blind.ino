@@ -18,7 +18,7 @@
  * 左键 (0x4) - 默认:升起窗帘(微调)
  * 右键 (0x6) - 默认:放下转动(微调)
  * 设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间
- * 关闭键 (0x5) - 停止电机 / 连续3次清除存储
+ * 中间键 (0x5) - 停止电机 / 连续3次清除存储
  *  0键  (0x1A) - 切换电机转动方向
  */
 #include "config.h"
@@ -35,8 +35,7 @@
 int speed = 600;  // 步/秒 (流畅转动)
 
 // 窗帘控制时间设置
-int CURTAIN_TIME = DEFAULT_CURTAIN_TIME;  // 窗帘开关时间 (毫秒) - 可修改
-
+int currentCurtainTime = DEFAULT_CURTAIN_TIME;  // 窗帘开关时间 (毫秒) - 可修改
 
 //方向设置（可动态切换）
 bool isNormalDirection = true;  // 默认方向
@@ -46,7 +45,7 @@ bool motorRunning = false;
 bool stopRequested = false;  // 停止请求标志
 
 // 窗帘状态标志位
-bool isFullyRolledUp = false;    // 是否完全卷起
+bool isFullyRolledUp = false;    // 是否完全升起
 bool isFullyRolledDown = false;  // 是否完全放下
 
 // 设置模式状态
@@ -75,15 +74,13 @@ const unsigned long IR_DEBOUNCE_TIME = 200; // 200ms防抖时间
    digitalWrite(STEP_PIN, LOW);
    digitalWrite(DIR_PIN, LOW);
    digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机（待机状态）
-   
-  // 初始化红外接收 (0038k模块)
-  IrReceiver.begin(IR_RECEIVE_PIN, false);
-  
   // 读取存储的窗帘时间
   loadCurtainTime();
   
   // 读取存储的方向设置
   loadDirectionSetting();
+  // 初始化红外接收 (0038k模块)
+  IrReceiver.begin(IR_RECEIVE_PIN, false);
   
   // 初始化窗帘状态标志位
   isFullyRolledUp = false;
@@ -112,6 +109,7 @@ void loop() {
     Serial.println(command, HEX);
     if(address != IR_ADDRESS){
        IrReceiver.resume();
+        Serial.println("address not equals,return");
        return;
     }
 
@@ -312,14 +310,14 @@ void rotateForTime(int duration, bool clockwise) {
 // 打印红外命令说明
 void printIRCommands() {
   Serial.println("红外遥控器按键功能:");
-  Serial.print("上键 (0x1) - 窗帘卷起");
-  Serial.print(CURTAIN_TIME);
+  Serial.print("上键 (0x1) - 窗帘升起");
+  Serial.print(currentCurtainTime);
   Serial.println("毫秒)");
   Serial.print("下键 (0x9) - 窗帘放下");
-  Serial.print(CURTAIN_TIME);
+  Serial.print(currentCurtainTime);
   Serial.println("毫秒)");
-  Serial.println("左键 (0x4) -默认:逆时针转动0.8秒");
-  Serial.println("右键 (0x6) - 默认:顺时针转动0.8秒");
+  Serial.println("左键 (0x4) - 微调升起");
+  Serial.println("右键 (0x6) - 微调放下");
   Serial.println("设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间");
   Serial.println("0键 (0x0) - 停止电机 / 连续3次清除存储");
   Serial.println("方向键 (0x1A) - 切换电机转动方向");
@@ -334,10 +332,10 @@ void handleIRCommand(uint32_t command) {
   switch (command) {
     case IR_KEY_UP:
       if (isFullyRolledUp) {
-        Serial.println("窗帘已经完全卷起，停止动作");
+        Serial.println("窗帘已经完全升起，停止动作");
         break;
       }
-      Serial.println("执行: 窗帘卷起");
+      Serial.println("执行: 窗帘升起");
       Serial.print("isNormalDirection = ");
       Serial.println(isNormalDirection ? "true" : "false");
       isFullyRolledDown = false;
@@ -445,7 +443,7 @@ void stopMotor() {
 
 // 打开窗帘
 void rollUpCurtain() {
-  Serial.println("=== 开始卷起窗帘 ===");
+  Serial.println("=== 开始升起窗帘 ===");
   Serial.print("当前速度设置: ");
   Serial.print(speed);
   Serial.println(" 步/秒");
@@ -454,15 +452,12 @@ void rollUpCurtain() {
   stopRequested = false;  // 重置停止标志
   
   Serial.print("调用 rotateForTime(");
-  Serial.print(CURTAIN_TIME);
+  Serial.print(currentCurtainTime);
   Serial.print(", ");
   Serial.print(isNormalDirection ? "true" : "false");
   Serial.println(")");
-  Serial.print("isNormalDirection = ");
-  Serial.print(isNormalDirection ? "true" : "false");
-  Serial.print(", 传递给rotateForTime的参数 = ");
-  Serial.println(isNormalDirection ? "true" : "false");
-  // 卷起窗帘：使用isNormalDirection的值
+
+  // 升起窗帘：使用isNormalDirection的值
   bool directionParam;
   if (isNormalDirection == true) {
     directionParam = true;
@@ -473,7 +468,7 @@ void rollUpCurtain() {
   Serial.println(directionParam ? "true" : "false");
   Serial.print("isNormalDirection当前值: ");
   Serial.println(isNormalDirection ? "true" : "false");
-  rotateForTime(CURTAIN_TIME, directionParam);
+  rotateForTime(currentCurtainTime, directionParam);
   
   Serial.println("rotateForTime 函数返回");
   motorRunning = false;
@@ -482,16 +477,16 @@ void rollUpCurtain() {
   Serial.println(stopRequested ? "true" : "false");
   
   if (!stopRequested) {
-    Serial.println("窗帘已卷起");
-    isFullyRolledUp = true;    // 设置完全卷起状态
+    Serial.println("窗帘已升起");
+    isFullyRolledUp = true;    // 设置完全升起状态
     isFullyRolledDown = false; // 清除完全放下状态
   } else {
-    Serial.println("窗帘卷起被中断");
+    Serial.println("窗帘升起被中断");
   }
   
   // 重置停止请求标志
   stopRequested = false;
-  Serial.println("=== 卷起窗帘完成 ===");
+  Serial.println("=== 升起窗帘完成 ===");
 }
 
 // 放下窗帘
@@ -510,13 +505,13 @@ void layDownCurtain() {
   Serial.println(directionParam ? "true" : "false");
   Serial.print("isNormalDirection当前值: ");
   Serial.println(isNormalDirection ? "true" : "false");
-  rotateForTime(CURTAIN_TIME, directionParam);
+  rotateForTime(currentCurtainTime, directionParam);
   
   motorRunning = false;
   if (!stopRequested) {
     Serial.println("窗帘已放下");
     isFullyRolledDown = true;  // 设置完全放下状态
-    isFullyRolledUp = false;   // 清除完全卷起状态
+    isFullyRolledUp = false;   // 清除完全升起状态
   } else {
     Serial.println("窗帘放下被中断");
   }
@@ -581,7 +576,7 @@ void handleSetKey() {
      Serial.println("窗帘完全放下..");
     
     // 保存时间
-    CURTAIN_TIME = duration;
+    currentCurtainTime = duration;
     saveCurtainTime();
     isFullyRolledDown = true;  // 设置完全放下状态
     isFullyRolledUp = false;  
@@ -589,7 +584,7 @@ void handleSetKey() {
     setMode = false;
     Serial.println("=== 退出设置模式 ===");
     Serial.print("新的窗帘时间已保存: ");
-    Serial.print(CURTAIN_TIME);
+    Serial.print(currentCurtainTime);
     Serial.println(" 毫秒");
   }
 }
@@ -633,7 +628,7 @@ void handleShutdownKey() {
 // 保存窗帘时间到EEPROM
 void saveCurtainTime() {
   EEPROM.begin(512);
-  EEPROM.put(0, CURTAIN_TIME);
+  EEPROM.put(0, currentCurtainTime);
   EEPROM.commit();
   EEPROM.end();
   Serial.println("窗帘时间已保存到EEPROM");
@@ -647,14 +642,14 @@ void loadCurtainTime() {
   EEPROM.end();
   
   if (savedTime > 0 && savedTime < 60000) { // 合理范围检查
-    CURTAIN_TIME = savedTime;
+    currentCurtainTime = savedTime;
     Serial.print("从EEPROM读取窗帘时间: ");
-    Serial.print(CURTAIN_TIME);
+    Serial.print(currentCurtainTime);
     Serial.println(" 毫秒");
   } else {
-    CURTAIN_TIME = DEFAULT_CURTAIN_TIME;
+    currentCurtainTime = DEFAULT_CURTAIN_TIME;
     Serial.print("使用默认窗帘时间: ");
-    Serial.print(CURTAIN_TIME);
+    Serial.print(currentCurtainTime);
     Serial.println(" 毫秒");
   }
 }
@@ -666,9 +661,9 @@ void clearCurtainTime() {
   EEPROM.commit();
   EEPROM.end();
   
-  CURTAIN_TIME = DEFAULT_CURTAIN_TIME;
+  currentCurtainTime = DEFAULT_CURTAIN_TIME;
   Serial.print("已清除存储，恢复默认时间: ");
-  Serial.print(CURTAIN_TIME);
+  Serial.print(currentCurtainTime);
   Serial.println(" 毫秒");
 }
 
@@ -691,7 +686,8 @@ void handleDirectionKey() {
   
   // 保存方向设置
   saveDirectionSetting();
-  
+  isFullyRolledUp = false;    
+  isFullyRolledDown = false;
   Serial.print("方向已切换为: ");
   Serial.println(isNormalDirection ? "RIGHT模式" : "LEFT模式");
   Serial.println("新的方向设置已保存到EEPROM");
@@ -713,8 +709,27 @@ void loadDirectionSetting() {
   EEPROM.get(4, savedDirection);
   EEPROM.end();
   
-  // 检查读取的值是否有效（bool类型，任何值都有效）
-  isNormalDirection = savedDirection;
+  // 检查是否是第一次运行（通过检查是否有有效的方向设置标志）
+  // 使用地址5作为方向设置是否已初始化的标志
+  EEPROM.begin(512);
+  bool directionInitialized;
+  EEPROM.get(5, directionInitialized);
+  EEPROM.end();
+  
+  if (!directionInitialized) {
+    // 第一次运行，使用默认方向设置并保存
+    isNormalDirection = true;  // 默认方向
+    saveDirectionSetting();
+    // 标记方向设置已初始化
+    EEPROM.begin(512);
+    EEPROM.put(5, true);  // 标记已初始化
+    EEPROM.commit();
+    EEPROM.end();
+    Serial.println("首次运行，使用默认方向设置并保存");
+  } else {
+    // 已初始化过，使用保存的设置
+    isNormalDirection = savedDirection;
+  }
   
   Serial.print("从EEPROM读取方向设置: ");
   Serial.println(isNormalDirection ? "RIGHT模式" : "LEFT模式");
