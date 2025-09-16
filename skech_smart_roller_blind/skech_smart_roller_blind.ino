@@ -2,16 +2,6 @@
  * ESP32 + A4988 步进电机 + 红外接收控制程序
  * 适用于42步进电机 - 窗帘控制系统
  * 
- * 连接:
- * ESP32 GPIO 16 -> A4988 STEP
- * ESP32 GPIO 17 -> A4988 DIR
- * ESP32 GPIO 18 -> A4988 ENABLE (可选)
- * ESP32 GPIO 19 -> 红外接收模块 OUT
- * ESP32 3.3V    -> A4988 VDD, 红外接收模块 VCC
- * ESP32 GND     -> A4988 GND, 红外接收模块 GND
- * 12V电源       -> A4988 VMOT
- * 12V电源GND    -> A4988 GND
- * 
  * 红外遥控器按键功能 (基于实际命令码):
  * 上键 (0x1) - 升起窗帘 (默认:逆时针转动指定时间)
  * 下键 (0x9) - 放下窗帘 (默认:顺时针时针转动指定时间)
@@ -19,7 +9,7 @@
  * 右键 (0x6) - 默认:放下转动(微调)
  * 设置键 (0xE) - 进入设置模式开始计时关闭 / 停止计时保存时间
  * 中间键 (0x5) - 停止电机 / 连续3次清除存储
- *  0键  (0x1A) - 切换电机转动方向
+ *  9键  (0x1A) - 切换电机转动方向
  */
 #include "config.h"
 #include <IRremote.h>
@@ -629,8 +619,8 @@ void handleShutdownKey() {
 
 // 保存窗帘时间到EEPROM
 void saveCurtainTime() {
-  EEPROM.begin(512);
-  EEPROM.put(0, currentCurtainTime);
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.put(EEPROM_CURTAIN_TIME_ADDR, currentCurtainTime);
   EEPROM.commit();
   EEPROM.end();
   Serial.println("窗帘时间已保存到EEPROM");
@@ -638,9 +628,9 @@ void saveCurtainTime() {
 
 // 从EEPROM读取窗帘时间
 void loadCurtainTime() {
-  EEPROM.begin(512);
+  EEPROM.begin(EEPROM_SIZE);
   int savedTime;
-  EEPROM.get(0, savedTime);
+  EEPROM.get(EEPROM_CURTAIN_TIME_ADDR, savedTime);
   EEPROM.end();
   
   if (savedTime > 0 && savedTime < 60000) { // 合理范围检查
@@ -658,8 +648,8 @@ void loadCurtainTime() {
 
 // 清除存储的窗帘时间
 void clearCurtainTime() {
-  EEPROM.begin(512);
-  EEPROM.put(0, 0); // 写入0表示无效
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.put(EEPROM_CURTAIN_TIME_ADDR, 0); // 写入0表示无效
   EEPROM.commit();
   EEPROM.end();
   
@@ -697,8 +687,8 @@ void handleDirectionKey() {
 
 // 保存方向设置到EEPROM
 void saveDirectionSetting() {
-  EEPROM.begin(512);
-  EEPROM.put(4, isNormalDirection);  // 地址4存储方向设置
+  EEPROM.begin(EEPROM_SIZE);
+  EEPROM.put(EEPROM_DIRECTION_ADDR, isNormalDirection);  // 存储方向设置
   EEPROM.commit();
   EEPROM.end();
   Serial.println("方向设置已保存到EEPROM");
@@ -706,25 +696,25 @@ void saveDirectionSetting() {
 
 // 从EEPROM读取方向设置
 void loadDirectionSetting() {
-  EEPROM.begin(512);
+  EEPROM.begin(EEPROM_SIZE);
   bool savedDirection;
-  EEPROM.get(4, savedDirection);
+  EEPROM.get(EEPROM_DIRECTION_ADDR, savedDirection);
   EEPROM.end();
   
   // 检查是否是第一次运行（通过检查是否有有效的方向设置标志）
   // 使用地址5作为方向设置是否已初始化的标志
-  EEPROM.begin(512);
+  EEPROM.begin(EEPROM_SIZE);
   bool directionInitialized;
-  EEPROM.get(5, directionInitialized);
+  EEPROM.get(EEPROM_DIRECTION_INIT_FLAG_ADDR, directionInitialized);
   EEPROM.end();
   
   if (!directionInitialized) {
     // 第一次运行，使用默认方向设置并保存
-    isNormalDirection = true;  // 默认方向
+    isNormalDirection = DEFAULT_IS_NORMAL_DIRECTION;  // 使用配置的默认方向
     saveDirectionSetting();
     // 标记方向设置已初始化
-    EEPROM.begin(512);
-    EEPROM.put(5, true);  // 标记已初始化
+    EEPROM.begin(EEPROM_SIZE);
+    EEPROM.put(EEPROM_DIRECTION_INIT_FLAG_ADDR, true);  // 标记已初始化
     EEPROM.commit();
     EEPROM.end();
     Serial.println("首次运行，使用默认方向设置并保存");
