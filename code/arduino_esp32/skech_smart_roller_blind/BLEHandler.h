@@ -26,7 +26,6 @@
 #define BLE_CMD_SET 'T'       // 设置模式
 #define BLE_CMD_DIRECTION 'G' // 切换方向
 
-// 前向声明
 class BLEHandler;
 
 // BLE控制特征值回调
@@ -66,7 +65,7 @@ private:
     void (*onSetCommand)();
     void (*onDirectionCommand)();
     
-    // 友元类，允许ControlCharacteristicCallbacks访问私有成员
+
     friend class ControlCharacteristicCallbacks;
     
 public:

@@ -33,7 +33,7 @@ bool isNormalDirection = true;  // 默认方向
 
 // 电机状态
 bool motorRunning = false;
-bool stopRequested = false;  // 停止请求标志
+volatile bool stopRequested = false;  // 停止请求标志
 
 // 窗帘状态标志位
 bool isFullyRolledUp = false;    // 是否完全升起
@@ -54,6 +54,15 @@ const unsigned long IR_DEBOUNCE_TIME = 200; // 200ms防抖时间
 
 // BLE处理器
 BLEHandler* bleHandler = nullptr;
+
+// BLE命令队列（用于非阻塞处理）
+volatile bool bleStopRequested = false;
+volatile bool bleUpRequested = false;
+volatile bool bleDownRequested = false;
+volatile bool bleLeftRequested = false;
+volatile bool bleRightRequested = false;
+volatile bool bleSetRequested = false;
+volatile bool bleDirectionRequested = false;
  
  void setup() {
    Serial.begin(9600);
@@ -114,11 +123,80 @@ void loop() {
     lastBLEStatusTime = millis();
   }
   
-  // 检查BLE停止命令（实时检测，优先级最高）
-  if (stopRequested && motorRunning) {
+  // 处理BLE命令队列（优先级最高）
+  if (bleStopRequested) {
     Serial.println("loop()中检测到BLE停止命令，立即停止电机");
+    bleStopRequested = false;
+    stopRequested = true;
     stopMotor();
-    stopRequested = false;  // 重置标志
+  }
+  
+  if (bleUpRequested) {
+    Serial.println("loop()中检测到BLE升起命令");
+    bleUpRequested = false;
+    if (isFullyRolledUp) {
+      Serial.println("窗帘已经完全升起，停止动作");
+    } else {
+      isFullyRolledDown = false;
+      isFullyRolledUp = false;
+      rollUpCurtain();
+    }
+  }
+  
+  if (bleDownRequested) {
+    Serial.println("loop()中检测到BLE放下命令");
+    bleDownRequested = false;
+    if (isFullyRolledDown) {
+      Serial.println("窗帘已经完全放下，无响应");
+    } else {
+      isFullyRolledDown = false;
+      isFullyRolledUp = false;
+      layDownCurtain();
+    }
+  }
+  
+  if (bleLeftRequested) {
+    Serial.println("loop()中检测到BLE微调升起命令");
+    bleLeftRequested = false;
+    isFullyRolledUp = false;
+    isFullyRolledDown = false;
+    stopRequested = false;
+    
+    bool leftDirection;
+    if (isNormalDirection == true) {
+      leftDirection = true;  // 微调升起=逆时针
+    } else {
+      leftDirection = false; // 微调升起=顺时针
+    }
+    rotateForTime(SIDE_KEY_TIME, leftDirection);
+  }
+  
+  if (bleRightRequested) {
+    Serial.println("loop()中检测到BLE微调放下命令");
+    bleRightRequested = false;
+    isFullyRolledUp = false;
+    isFullyRolledDown = false;
+    stopRequested = false;
+    
+    bool rightDirection;
+    if (isNormalDirection == true) {
+      rightDirection = false; // 微调放下=顺时针
+    } else {
+      rightDirection = true;  // 微调放下=逆时针
+    }
+    rotateForTime(SIDE_KEY_TIME, rightDirection);
+  }
+  
+  if (bleSetRequested) {
+    Serial.println("loop()中检测到BLE设置命令");
+    bleSetRequested = false;
+    handleSetKey();
+  }
+  
+  if (bleDirectionRequested) {
+    Serial.println("loop()中检测到BLE方向切换命令");
+    bleDirectionRequested = false;
+    handleDirectionKey();
   }
   
   // 检查红外信号（设置模式下减少处理频率）
@@ -149,8 +227,8 @@ void loop() {
           command != 0xFFFFFFFF &&
           address != 0x0 && protocol != 0) {
         
-        // 应用防重复机制（设置模式下使用更长的防抖时间）
-        const unsigned long SET_MODE_DEBOUNCE_TIME = 1000; // 设置模式防抖时间：1秒
+        // 应用防重复机制（设置模式下使用较短的防抖时间）
+        const unsigned long SET_MODE_DEBOUNCE_TIME = 200; // 设置模式防抖时间：200ms
         if (command != lastIRCommand || (currentTime - lastIRTime) > SET_MODE_DEBOUNCE_TIME) {
           Serial.print("设置模式接收到命令: 0x");
           Serial.println(command, HEX);
@@ -192,76 +270,95 @@ void loop() {
     IrReceiver.resume(); // 准备接收下一个信号
   }
   
-  // 检查设置模式下的持续转动（非阻塞版本）
+  // 检查设置模式下的持续转动 - 使用非阻塞步进控制逻辑
   if (setMode && timingInProgress && motorRunning) {
     // 确保电机已启用
     digitalWrite(ENABLE_PIN, LOW);  // 启用电机
     
-    // 设置模式下使用与正常使用相同的转速，确保时间设置准确
-    unsigned long stepDelay = 1000000 / speed;
-    
-    // 非阻塞步进控制
+    // 使用与rotateForTime完全相同的步进控制逻辑
+    static unsigned long stepDelay = 1000000 / speed;
     static unsigned long lastStepTime = 0;
+    static bool stepState = false;
+    static int totalSteps = 0;
+    static unsigned long lastSetModeTime = 0;
+    static unsigned long startTime = 0;
+    static bool directionSet = false;
+    
+    // 每次进入设置模式时重新初始化所有变量
+    if (timingStart != lastSetModeTime) {
+      stepState = false;
+      lastStepTime = 0;
+      totalSteps = 0;
+      lastSetModeTime = timingStart;
+      startTime = millis();
+      directionSet = false;
+    }
+    
+    // 设置方向（只设置一次）
+    if (!directionSet) {
+      if (isNormalDirection == true) {
+        digitalWrite(DIR_PIN, LOW);  // 放下方向
+      } else {
+        digitalWrite(DIR_PIN, HIGH); // 放下方向
+      }
+      directionSet = true;
+    }
+    
+    // 每次循环都检查停止标志（提高响应速度） - 完全复制rotateForTime的逻辑
+    if (bleStopRequested) {
+      Serial.println("设置模式接收到BLE停止命令，立即停止");
+      bleStopRequested = false;  // 清除标志
+      // 停止电机
+      digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
+      motorRunning = false;
+      timingInProgress = false;
+      setMode = false;
+      Serial.println("=== 退出设置模式 ===");
+      return;
+    }
+    
+    if (stopRequested) {
+      Serial.println("设置模式接收到停止命令，立即停止");
+      // 停止电机
+      digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
+      motorRunning = false;
+      timingInProgress = false;
+      setMode = false;
+      Serial.println("=== 退出设置模式 ===");
+      return;
+    }
+    
+    // 完全复制rotateForTime的步进控制逻辑 - 非阻塞版本
     if (millis() - lastStepTime >= stepDelay / 1000) {  // 转换为毫秒
-      digitalWrite(STEP_PIN, HIGH);
-      delayMicroseconds(1);  // 极短脉冲宽度，流畅
-      digitalWrite(STEP_PIN, LOW);
-      lastStepTime = millis();
-      
-      // 添加步数计数，用于调试
-      static int totalSteps = 0;
-      totalSteps++;
-      
-      // 每5秒显示一次计时状态
-      static unsigned long lastStatusTime = 0;
-      if (millis() - lastStatusTime > 5000) {
-        unsigned long elapsed = millis() - timingStart;
-        Serial.print("设置模式 - 已计时: ");
-        Serial.print(elapsed);
-        Serial.print(" 毫秒 (转速: ");
-        Serial.print(speed);
-        Serial.print(" 步/秒, 总步数: ");
-        Serial.print(totalSteps);
-        Serial.println(" - 流畅转动模式)");
-        lastStatusTime = millis();
+      // 执行步进脉冲（非阻塞状态机） - 完全复制rotateForTime的逻辑
+      if (!stepState) {
+        digitalWrite(STEP_PIN, HIGH);
+        stepState = true;
+      } else {
+        digitalWrite(STEP_PIN, LOW);
+        stepState = false;
+        lastStepTime = millis();
+        totalSteps++;
       }
-      
-      // 检查红外信号和BLE命令，允许停止按键打断（减少检查频率）
-      static int stepCount = 0;
-      stepCount++;
-      if (stepCount % 500 == 0) {  // 每500步检查一次，减少干扰
-        // 检查红外信号
-        if (IrReceiver.decode()) {
-          uint32_t command = IrReceiver.decodedIRData.command;
-          uint32_t address = IrReceiver.decodedIRData.address;
-          uint8_t protocol = IrReceiver.decodedIRData.protocol;
-          
-           // 只响应有效的SHUT_DOWN信号
-           if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
-             Serial.println("设置模式下接收到红外停止信号，退出设置模式");
-             digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
-             setMode = false;
-             timingInProgress = false;
-             motorRunning = false;
-             stepCount = 0;
-             IrReceiver.resume();
-             return;
-           }
-          IrReceiver.resume();
-        }
-        
-        // 检查BLE停止命令
-        if (stopRequested) {
-          Serial.println("设置模式下接收到BLE停止命令，退出设置模式");
-          digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
-          setMode = false;
-          timingInProgress = false;
-          motorRunning = false;
-          stepCount = 0;
-          stopRequested = false;  // 重置停止标志
-          return;
-        }
-      }
+    }
+    
+    // 让出CPU时间给其他任务（包括BLE回调） - 完全复制rotateForTime的逻辑
+    delay(1);  // 1毫秒延迟，让BLE回调有机会执行
+    
+    // 每1秒显示一次计时状态
+    static unsigned long lastStatusTime = 0;
+    if (millis() - lastStatusTime > 1000) {
+      unsigned long elapsed = millis() - startTime;
+      Serial.print("设置模式 - 已计时: ");
+      Serial.print(elapsed);
+      Serial.print(" 毫秒 (转速: ");
+      Serial.print(speed);
+      Serial.print(" 步/秒, 总步数: ");
+      Serial.print(totalSteps);
+      Serial.print(", 步进延迟: ");
+      Serial.print(stepDelay);
+      Serial.println(" 微秒)");
+      lastStatusTime = millis();
     }
   }
   
@@ -275,7 +372,6 @@ void loop() {
     digitalWrite(ENABLE_PIN, HIGH);  // 确保电机被禁用
   }
 }
- 
 
 // 转动指定时长 (毫秒) - 非阻塞版本
 void rotateForTime(int duration, bool clockwise) {
@@ -300,48 +396,60 @@ void rotateForTime(int duration, bool clockwise) {
   Serial.print(stepDelay);
   Serial.println(" 微秒");
   
-  // 非阻塞方式：使用时间检查而不是while循环
-  while (millis() - startTime < duration && !stopRequested) {
+  // 完全非阻塞方式：使用状态机而不是while循环
+  bool stepState = false;  // 移除static，每次调用函数时重新初始化
+  while (millis() - startTime < duration) {
+    // 每次循环都检查停止标志（提高响应速度）
+    if (bleStopRequested) {
+      Serial.println("旋转过程中接收到BLE停止命令，立即停止");
+      bleStopRequested = false;  // 清除标志
+      break;
+    }
+    
+    if (stopRequested) {
+      Serial.println("旋转过程中接收到停止命令，立即停止");
+      break;
+    }
+    
     // 检查是否到了执行下一步的时间
     if (millis() - lastStepTime >= stepDelay / 1000) {  // 转换为毫秒
-      digitalWrite(STEP_PIN, HIGH);
-      delayMicroseconds(1);  // 极短脉冲宽度，流畅
-      digitalWrite(STEP_PIN, LOW);
-      lastStepTime = millis();
-      stepCount++;
-      
-      // 每2000步打印一次进度（减少打印频率）
-      if (stepCount % 2000 == 0) {
-        unsigned long elapsed = millis() - startTime;
-        Serial.print("已执行 ");
-        Serial.print(stepCount);
-        Serial.print(" 步，用时 ");
-        Serial.print(elapsed);
-        Serial.println(" 毫秒");
-      }
-      
-      // 每100步检查一次红外信号和BLE命令（减少检查频率提高流畅性）
-      if (stepCount % 100 == 0) {
-        // 检查红外信号
-        if (IrReceiver.decode()) {
-          uint32_t command = IrReceiver.decodedIRData.command;
-          uint32_t address = IrReceiver.decodedIRData.address;
-          uint8_t protocol = IrReceiver.decodedIRData.protocol;
-          
-          // 只有在接收到有效的停止信号时才停止（地址不为0x0，协议不为0）
-          if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
-            Serial.println("旋转过程中接收到有效红外停止信号，立即停止");
-            stopRequested = true;
-            IrReceiver.resume();
-            break;
-          }
-          IrReceiver.resume();
+      // 执行步进脉冲（非阻塞）
+      if (!stepState) {
+        digitalWrite(STEP_PIN, HIGH);
+        stepState = true;
+      } else {
+        digitalWrite(STEP_PIN, LOW);
+        stepState = false;
+        lastStepTime = millis();
+        stepCount++;
+        
+        // 每2000步打印一次进度（减少打印频率）
+        if (stepCount % 2000 == 0) {
+          unsigned long elapsed = millis() - startTime;
+          Serial.print("已执行 ");
+          Serial.print(stepCount);
+          Serial.print(" 步，用时 ");
+          Serial.print(elapsed);
+          Serial.println(" 毫秒");
         }
         
-        // 检查BLE停止命令（通过stopRequested标志）
-        if (stopRequested) {
-          Serial.println("旋转过程中接收到BLE停止命令，立即停止");
-          break;
+        // 每10步检查一次红外信号（减少检查频率提高流畅性）
+        if (stepCount % 10 == 0) {
+          // 检查红外信号
+          if (IrReceiver.decode()) {
+            uint32_t command = IrReceiver.decodedIRData.command;
+            uint32_t address = IrReceiver.decodedIRData.address;
+            uint8_t protocol = IrReceiver.decodedIRData.protocol;
+            
+            // 只有在接收到有效的停止信号时才停止（地址不为0x0，协议不为0）
+            if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
+              Serial.println("旋转过程中接收到有效红外停止信号，立即停止");
+              stopRequested = true;
+              IrReceiver.resume();
+              break;
+            }
+            IrReceiver.resume();
+          }
         }
       }
     }
@@ -363,12 +471,12 @@ void rotateForTime(int duration, bool clockwise) {
 }
 
 // 设置速度
-  void setSpeed(int newSpeed) {
-     speed = constrain(newSpeed, 200, 1000);  // 限制速度范围，流畅转动设置
-    Serial.print("速度设置为: ");
-    Serial.print(speed);
-    Serial.println(" 步/秒");
-  }
+void setSpeed(int newSpeed) {
+  speed = constrain(newSpeed, 200, 1000);  // 限制速度范围，流畅转动设置
+  Serial.print("速度设置为: ");
+  Serial.print(speed);
+  Serial.println(" 步/秒");
+}
  
 // 打印红外命令说明
 void printIRCommands() {
@@ -601,6 +709,10 @@ void handleSetKey() {
     timingInProgress = true;
     timingStart = millis();
     
+    // 清除停止标志
+    stopRequested = false;
+    bleStopRequested = false;
+    
      // 开始关闭窗帘（放下方向）
      digitalWrite(ENABLE_PIN, LOW);  // 启用电机
      Serial.print("设置模式进入if判断前 isNormalDirection = ");
@@ -627,30 +739,10 @@ void handleSetKey() {
     Serial.println(" 步/秒");
     
   } else {
-    // 在设置模式中，停止计时
-    Serial.println("第二次按下SET键，停止计时并保存时间");
-    unsigned long duration = millis() - timingStart;
-    Serial.print("计时结束，窗帘关闭时间: ");
-    Serial.print(duration);
-    Serial.println(" 毫秒");
-
-     // 停止电机
-     digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
-     motorRunning = false;
-     timingInProgress = false;
-     Serial.println("窗帘完全放下..");
-    
-    // 保存时间
-    currentCurtainTime = duration;
-    saveCurtainTime();
-    isFullyRolledDown = true;  // 设置完全放下状态
-    isFullyRolledUp = false;  
-    // 退出设置模式
-    setMode = false;
-    Serial.println("=== 退出设置模式 ===");
-    Serial.print("新的窗帘时间已保存: ");
-    Serial.print(currentCurtainTime);
-    Serial.println(" 毫秒");
+    // 在设置模式中，设置停止标志（使用和BLE停止相同的方式）
+    Serial.println("第二次按下SET键，设置停止标志");
+    stopRequested = true;
+    bleStopRequested = true;  // 同时设置BLE停止标志，确保rotateForTime能检测到
   }
 }
 
@@ -806,99 +898,36 @@ void loadDirectionSetting() {
 
 void handleBLEUpCommand() {
   Serial.println("=== BLE命令: 升起窗帘 ===");
-  if (isFullyRolledUp) {
-    Serial.println("窗帘已经完全升起，停止动作");
-    return;
-  }
-  isFullyRolledDown = false;
-  isFullyRolledUp = false;
-  rollUpCurtain();
+  bleUpRequested = true;
 }
 
 void handleBLEDownCommand() {
   Serial.println("=== BLE命令: 放下窗帘 ===");
-  if (isFullyRolledDown) {
-    Serial.println("窗帘已经完全放下，无响应");
-    return;
-  }
-  isFullyRolledDown = false;
-  isFullyRolledUp = false;
-  layDownCurtain();
+  bleDownRequested = true;
 }
 
 void handleBLELeftCommand() {
   Serial.println("=== BLE命令: 微调升起 ===");
-  isFullyRolledUp = false;
-  isFullyRolledDown = false;
-  stopRequested = false;
-  
-  bool leftDirection;
-  if (isNormalDirection == true) {
-    leftDirection = true;  // 微调升起=逆时针
-  } else {
-    leftDirection = false; // 微调升起=顺时针
-  }
-  rotateForTime(SIDE_KEY_TIME, leftDirection);
+  bleLeftRequested = true;
 }
 
 void handleBLERightCommand() {
   Serial.println("=== BLE命令: 微调放下 ===");
-  isFullyRolledUp = false;
-  isFullyRolledDown = false;
-  stopRequested = false;
-  
-  bool rightDirection;
-  if (isNormalDirection == true) {
-    rightDirection = false; // 微调放下=顺时针
-  } else {
-    rightDirection = true;  // 微调放下=逆时针
-  }
-  rotateForTime(SIDE_KEY_TIME, rightDirection);
+  bleRightRequested = true;
 }
 
 void handleBLEStopCommand() {
   Serial.println("=== BLE命令: 停止电机 ===");
-  Serial.print("当前时间: ");
-  Serial.println(millis());
-  Serial.print("当前电机运行状态: ");
-  Serial.println(motorRunning ? "运行中" : "已停止");
-  Serial.print("当前设置模式: ");
-  Serial.println(setMode ? "是" : "否");
-  Serial.print("当前计时进行中: ");
-  Serial.println(timingInProgress ? "是" : "否");
-  
-  // 检查是否在设置模式
-  if (setMode) {
-    Serial.println("设置模式下收到BLE停止命令，退出设置模式");
-    digitalWrite(ENABLE_PIN, HIGH);  // 禁用电机
-    setMode = false;
-    timingInProgress = false;
-    motorRunning = false;
-    return;
-  }
-  
-  // 正常停止电机（按照红外停止命令的处理方式）
-  Serial.println("执行: 停止电机");
-  Serial.print("设置stopRequested前: ");
-  Serial.println(stopRequested ? "true" : "false");
-  
-  stopRequested = true;
-  
-  Serial.print("设置stopRequested后: ");
-  Serial.println(stopRequested ? "true" : "false");
-  
-  stopMotor();
-  
-  Serial.println("BLE停止命令处理完成");
+  bleStopRequested = true;
 }
 
 void handleBLESetCommand() {
   Serial.println("=== BLE命令: 设置模式 ===");
-  handleSetKey();
+  bleSetRequested = true;
 }
 
 void handleBLEDirectionCommand() {
   Serial.println("=== BLE命令: 切换方向 ===");
-  handleDirectionKey();
+  bleDirectionRequested = true;
 }
 
