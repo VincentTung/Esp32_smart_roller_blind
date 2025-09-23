@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RollerBlind</string>
+    
+    <!-- 设备连接相关 -->
+    <string name="device_not_connected">设备未连接</string>
+    <string name="device_not_connected_short">设备未连接</string>
+    <string name="device_already_connected">设备已连接</string>
+    <string name="connected">已连接</string>
+    <string name="disconnected">已断开连接</string>
+    <string name="connecting_device">正在连接设备...</string>
+    <string name="reconnecting_saved_device">正在重连保存的设备...</string>
+    <string name="no_saved_device">未发现保存的设备</string>
+    <string name="find_no_device">未找到设备</string>
+    <string name="write_failed">写入失败</string>
+    
+    <!-- 权限相关 -->
+    <string name="require_permission_failed">需要权限才能使用蓝牙功能</string>
+    <string name="turn_on_failed">蓝牙开启失败</string>
+    
+    <!-- 窗帘控制相关 -->
+    <string name="curtain_up">升起窗帘</string>
+    <string name="curtain_down">放下窗帘</string>
+    <string name="curtain_left">微调升起</string>
+    <string name="curtain_right">微调放下</string>
+    <string name="curtain_stop">停止电机</string>
+    <string name="curtain_set">设置模式</string>
+    <string name="curtain_direction">切换方向</string>
+    
+    <!-- 状态信息 -->
+    <string name="curtain_status_unknown">未知</string>
+    <string name="curtain_status_up">已升起</string>
+    <string name="curtain_status_down">已放下</string>
+    <string name="motor_status_stop">停止</string>
+    <string name="motor_status_running">运行中</string>
+    <string name="direction_status_normal">正常</string>
+    <string name="direction_status_reverse">反向</string>
+    
+    <!-- 按钮文本 -->
+    <string name="btn_reconnect">重连</string>
+    <string name="btn_phy_info">连接信息</string>
+    <string name="btn_clear_device">清除设备</string>
+    
+    <!-- 提示信息 -->
+    <string name="curtain_fully_up">窗帘已完全升起</string>
+    <string name="curtain_fully_down">窗帘已完全放下</string>
+    <string name="motor_stopped">电机已停止</string>
+    <string name="direction_changed">方向已切换</string>
+    <string name="set_mode_entered">已进入设置模式</string>
+    <string name="set_mode_exited">已退出设置模式</string>
+    
+    <!-- 错误信息 -->
+    <string name="command_failed">命令执行失败</string>
+    <string name="device_busy">设备忙碌中</string>
+</resources>

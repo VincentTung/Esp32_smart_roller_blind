@@ -1,0 +1,39 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.vincent.library.base'
+    compileSdkVersion 33
+
+    defaultConfig {
+        minSdkVersion 23
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+}
+
+dependencies {
+    api "org.jetbrains.kotlin:kotlin-stdlib:1.6.10"
+    api "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.6.10"
+    api "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.6.10"
+    api 'androidx.core:core-ktx:1.1.0'
+    api 'androidx.appcompat:appcompat:1.1.0'
+    // Kotlin协程依赖
+    api 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.6.4'
+    api 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4'
+    api 'androidx.lifecycle:lifecycle-runtime-ktx:2.3.1'
+    api 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.3.1'
+    api 'com.tencent:mmkv:1.2.13'
+    api 'com.github.ydstar:loadingdialog:1.0.0'
+}

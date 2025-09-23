@@ -45,4 +45,9 @@ const int DEFAULT_IS_NORMAL_DIRECTION = true;
 #define EEPROM_DIRECTION_ADDR 4            // 方向设置存储地址
 #define EEPROM_DIRECTION_INIT_FLAG_ADDR 5  // 方向设置初始化标志地址
 
+// BLE配置
+#define BLE_DEVICE_NAME "SmartRollerBlind"
+#define BLE_SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
+#define BLE_CHARACTERISTIC_CONTROL_UUID "12345678-1234-1234-1234-123456789def"
+
 #endif // 

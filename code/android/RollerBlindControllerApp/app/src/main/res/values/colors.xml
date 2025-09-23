@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background_color">#FAFAFA</color>
+    <color name="text_primary">#212121</color>
+    <color name="text_secondary">#757575</color>
+    <color name="accent_color">#2196F3</color>
+    <color name="primary_color">#1976D2</color>
+    <color name="success_color">#4CAF50</color>
+    <color name="warning_color">#FF9800</color>
+    <color name="error_color">#F44336</color>
+	<!-- Compat colors expected by styles.xml -->
+	<color name="colorPrimary">@color/primary_color</color>
+	<color name="colorPrimaryDark">#1565C0</color>
+	<color name="colorAccent">@color/accent_color</color>
+	<color name="titleTextColor">@color/text_primary</color>
+	<color name="button_white">#FFFFFF</color>
+	<color name="black">#000000</color>
+	<!-- Button and divider colors used by drawables/layouts -->
+	<color name="button_blue">@color/accent_color</color>
+	<color name="button_blue_dark">#1976D2</color>
+	<color name="divider_color">#E0E0E0</color>
+</resources>
