@@ -18,7 +18,9 @@
     <dimen name="icon_size_small">24dp</dimen>
     <dimen name="icon_size_medium">48dp</dimen>
     <dimen name="icon_size_large">72dp</dimen>
-    <dimen name="button_corner">20dp</dimen>
+    <dimen name="button_corner">8dp</dimen>
     <dimen name="divider_margin_left">20dp</dimen>
     <dimen name="back_width">25dp</dimen>
+    <dimen name="direction_btn_width">85dp</dimen>
+    <dimen name="direction_btn_height">85dp</dimen>
 </resources>

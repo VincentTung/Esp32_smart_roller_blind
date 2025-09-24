@@ -9,9 +9,14 @@ import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Button
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
+import com.bumptech.glide.Glide
+import com.bumptech.glide.load.resource.gif.GifDrawable
+import com.bumptech.glide.request.target.CustomTarget
+import com.bumptech.glide.request.transition.Transition
 import com.tbruyelle.rxpermissions2.RxPermissions
 import com.vincent.android.rollerblindcontroller.R
 import com.vincent.android.rollerblindcontroller.logic.RollerBlindController
@@ -31,27 +36,20 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
         private const val REQUEST_ENABLE_BLUETOOTH = 1001
     }
 
-    // UI组件
     private lateinit var tvDeviceName: TextView
     private lateinit var tvDeviceAddress: TextView
-    private lateinit var btnReconnect: Button
-    private lateinit var btnPhyInfo: Button
+    private lateinit var btnReconnect: LinearLayout
+    private lateinit var btnBlindsSet: LinearLayout
+    private lateinit var btnBlindsDirection: LinearLayout
+    private lateinit var ivGif: ImageView
     
     // 窗帘控制按钮
-    private lateinit var btnCurtainUp: Button
-    private lateinit var btnCurtainDown: Button
-    private lateinit var btnCurtainLeft: Button
-    private lateinit var btnCurtainRight: Button
-    private lateinit var btnCurtainStop: Button
-    private lateinit var btnCurtainSet: Button
-    private lateinit var btnCurtainDirection: Button
-    
-    // 状态显示
-    private lateinit var tvCurtainStatus: TextView
-    private lateinit var tvMotorStatus: TextView
-    private lateinit var tvDirectionStatus: TextView
+    private lateinit var ivBlindsUp: ImageView
+    private lateinit var ivBlindsDown: ImageView
+    private lateinit var ivBlindsLeft: ImageView
+    private lateinit var ivBlindsRight: ImageView
+    private lateinit var ivBlindsStop: ImageView
 
-    // 业务逻辑
     private val rxPermission = RxPermissions(this)
     private lateinit var rollerBlindController: RollerBlindController
 
@@ -60,18 +58,15 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
         logd(TAG, "onCreate")
         setContentView(R.layout.activity_main)
 
-        // 从Application获取已初始化的控制器实例
         rollerBlindController = RollerBlindController.getInstance()
-        logd(TAG, "从Application获取窗帘控制器实例")
-        
         initView()
+        stopGif()
         checkBluetoothAndPermissions()
     }
 
     private fun initView() {
-
         initDeviceInfoViews()
-        initCurtainControlViews()
+        initBlindsControlViews()
         initStatusViews()
     }
 
@@ -79,58 +74,72 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
         tvDeviceName = findViewById(R.id.tv_device_name)
         tvDeviceAddress = findViewById(R.id.tv_device_address)
         btnReconnect = findViewById(R.id.btn_reconnect)
-        btnPhyInfo = findViewById(R.id.btn_phy_info)
+        btnBlindsSet = findViewById(R.id.btn_curtain_set)
+        btnBlindsDirection = findViewById(R.id.btn_curtain_direction)
+        ivGif = findViewById(R.id.iv_gif)
+
+        // 设置按钮图标和文字
+        setupButton(btnReconnect, R.drawable.link, "重连")
+        setupButton(btnBlindsSet, R.drawable.setting, "设置模式")
+        setupButton(btnBlindsDirection, R.drawable.refesh_ratate, "切换方向")
 
         btnReconnect.setOnClickListener { reconnect() }
-        btnPhyInfo.setOnClickListener { showPhyInfo() }
     }
 
-    private fun initCurtainControlViews() {
-        btnCurtainUp = findViewById(R.id.btn_curtain_up)
-        btnCurtainDown = findViewById(R.id.btn_curtain_down)
-        btnCurtainLeft = findViewById(R.id.btn_curtain_left)
-        btnCurtainRight = findViewById(R.id.btn_curtain_right)
-        btnCurtainStop = findViewById(R.id.btn_curtain_stop)
-        btnCurtainSet = findViewById(R.id.btn_curtain_set)
-        btnCurtainDirection = findViewById(R.id.btn_curtain_direction)
+    private fun setupButton(button: LinearLayout, iconRes: Int, text: String) {
+        val icon = button.findViewById<ImageView>(R.id.btn_icon)
+        val textView = button.findViewById<TextView>(R.id.btn_text)
+        icon.setImageResource(iconRes)
+        textView.text = text
+    }
+
+    private fun initBlindsControlViews() {
+        ivBlindsUp = findViewById(R.id.btn_curtain_up)
+        ivBlindsDown = findViewById(R.id.btn_curtain_down)
+        ivBlindsLeft = findViewById(R.id.btn_curtain_left)
+        ivBlindsRight = findViewById(R.id.btn_curtain_right)
+        ivBlindsStop = findViewById(R.id.btn_curtain_stop)
+        btnBlindsSet = findViewById(R.id.btn_curtain_set)
+        btnBlindsDirection = findViewById(R.id.btn_curtain_direction)
 
         // 设置按钮点击事件
-        btnCurtainUp.setOnClickListener { 
+        ivBlindsUp.setOnClickListener { 
             if (checkConnection()) {
+                playGif("up.gif")
                 rollerBlindController.curtainUp { success ->
                     runOnUiThread {
                         if (success) {
                             ToastUtil.show(this, "正在升起窗帘")
-                            updateCurtainStatus("升起中")
                         } else {
                             ToastUtil.show(this, "命令执行失败")
+                            stopGif()
                         }
                     }
                 }
             }
         }
 
-        btnCurtainDown.setOnClickListener { 
+        ivBlindsDown.setOnClickListener { 
             if (checkConnection()) {
+                playGif("down.gif")
                 rollerBlindController.curtainDown { success ->
                     runOnUiThread {
                         if (success) {
-                            ToastUtil.show(this, "正在放下窗帘")
-                            updateCurtainStatus("放下中")
                         } else {
                             ToastUtil.show(this, "命令执行失败")
+                            stopGif()
                         }
                     }
                 }
             }
         }
 
-        btnCurtainLeft.setOnClickListener { 
+        ivBlindsLeft.setOnClickListener { 
             if (checkConnection()) {
                 rollerBlindController.curtainLeft { success ->
                     runOnUiThread {
                         if (success) {
-                            ToastUtil.show(this, "微调升起")
+                            stopGif()
                         } else {
                             ToastUtil.show(this, "命令执行失败")
                         }
@@ -139,12 +148,13 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
             }
         }
 
-        btnCurtainRight.setOnClickListener { 
+        ivBlindsRight.setOnClickListener { 
             if (checkConnection()) {
                 rollerBlindController.curtainRight { success ->
                     runOnUiThread {
                         if (success) {
-                            ToastUtil.show(this, "微调放下")
+
+                            stopGif()
                         } else {
                             ToastUtil.show(this, "命令执行失败")
                         }
@@ -153,13 +163,12 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
             }
         }
 
-        btnCurtainStop.setOnClickListener { 
+        ivBlindsStop.setOnClickListener { 
             if (checkConnection()) {
+                stopGif()
                 rollerBlindController.curtainStop { success ->
                     runOnUiThread {
                         if (success) {
-                            ToastUtil.show(this, "电机已停止")
-                            updateMotorStatus("停止")
                         } else {
                             ToastUtil.show(this, "命令执行失败")
                         }
@@ -168,12 +177,11 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
             }
         }
 
-        btnCurtainSet.setOnClickListener { 
+        btnBlindsSet.setOnClickListener { 
             if (checkConnection()) {
                 rollerBlindController.curtainSet { success ->
                     runOnUiThread {
                         if (success) {
-                            ToastUtil.show(this, "进入设置模式")
                         } else {
                             ToastUtil.show(this, "命令执行失败")
                         }
@@ -182,7 +190,7 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
             }
         }
 
-        btnCurtainDirection.setOnClickListener { 
+        btnBlindsDirection.setOnClickListener { 
             if (checkConnection()) {
                 rollerBlindController.curtainDirection { success ->
                     runOnUiThread {
@@ -198,14 +206,10 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
     }
 
     private fun initStatusViews() {
-        tvCurtainStatus = findViewById(R.id.tv_curtain_status)
-        tvMotorStatus = findViewById(R.id.tv_motor_status)
-        tvDirectionStatus = findViewById(R.id.tv_direction_status)
 
         // 初始化状态显示
-        updateCurtainStatus("未知")
-        updateMotorStatus("停止")
-        updateDirectionStatus("正常")
+        updateDeviceInfo("未连接", "无")
+
     }
 
     private fun checkConnection(): Boolean {
@@ -216,17 +220,9 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
         return true
     }
 
-    private fun updateCurtainStatus(status: String) {
-        tvCurtainStatus.text = "窗帘状态: $status"
-    }
 
-    private fun updateMotorStatus(status: String) {
-        tvMotorStatus.text = "电机状态: $status"
-    }
 
-    private fun updateDirectionStatus(status: String) {
-        tvDirectionStatus.text = "转动方向: $status"
-    }
+
 
     private fun checkBluetoothAndPermissions() {
         if (!VTBluetoothUtil.isEnable(this)) {
@@ -247,30 +243,27 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
         rollerBlindController.reconnect(this)
     }
 
-    private fun showPhyInfo() {
-        if (!rollerBlindController.isDeviceConnected()) {
-            ToastUtil.show(this, "设备未连接")
-            return
-        }
-        
-        val mtu = rollerBlindController.getCurrentMtu()
-        val txPhy = rollerBlindController.getCurrentTxPhy()
-        val rxPhy = rollerBlindController.getCurrentRxPhy()
-        val connectionQuality = rollerBlindController.getConnectionQualityInfo()
-        val bondingStatus = rollerBlindController.getBondingStatusInfo()
-        
-        val info = """
-            连接信息:
-            MTU: $mtu 字节
-            TX PHY: ${rollerBlindController.getPhyDescription(txPhy)}
-            RX PHY: ${rollerBlindController.getPhyDescription(rxPhy)}
-            
-            $connectionQuality
-            
-            $bondingStatus
-        """.trimIndent()
-        
-        ToastUtil.show(this, info)
+
+    private fun playGif(gifFileName: String) {
+        Glide.with(this)
+            .asGif()
+            .load("file:///android_asset/$gifFileName")
+            .into(object : CustomTarget<GifDrawable>() {
+                override fun onResourceReady(resource: GifDrawable, transition: Transition<in GifDrawable>?) {
+                    resource.setLoopCount(1) // 只播放一次
+                    ivGif.setImageDrawable(resource)
+                    resource.start()
+                }
+                
+                override fun onLoadCleared(placeholder: android.graphics.drawable.Drawable?) {
+                    // 清理资源
+                }
+            })
+    }
+
+    private fun stopGif() {
+        Glide.with(this).clear(ivGif)
+        ivGif.setImageResource(R.drawable.half_close)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
