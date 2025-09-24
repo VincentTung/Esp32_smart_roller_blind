@@ -5,14 +5,13 @@
     android:layout_height="match_parent"
     android:background="@color/background_color"
     android:orientation="vertical">
-
-    <!-- 顶部设备信息区域 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/background_color"
+        android:background="@drawable/device_info_border"
         android:gravity="center_vertical"
         android:orientation="horizontal"
+        android:layout_margin="5dp"
         android:padding="16dp">
 
         <LinearLayout
@@ -51,7 +50,6 @@
 
     </LinearLayout>
 
-    <!-- 主要内容区域 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -68,7 +66,6 @@
             android:layout_marginBottom="30dp"
             android:layout_weight="1"
             app:srcCompat="@drawable/full_open" />
-        <!-- 窗帘控制区域 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -113,7 +110,7 @@
 
             </LinearLayout>
 
-            <!-- 大型放下按钮 -->
+
             <ImageView
                 android:id="@+id/btn_curtain_down"
                 android:layout_width="@dimen/direction_btn_width"
@@ -125,16 +122,14 @@
 
     </LinearLayout>
 
-    <!-- 底部状态和设置区域 -->
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- 状态显示区域 -->
 
-        <!-- 设置按钮 -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
