@@ -12,3 +12,4 @@ code/arduino_esp32/skech_smart_roller_blind/build/esp32.esp32.lolin_c3_mini/skec
 code/arduino_esp32/skech_smart_roller_blind/build/esp32.esp32.lolin_c3_mini/skech_smart_roller_blind.ino.elf
 code/arduino_esp32/skech_smart_roller_blind/build/esp32.esp32.lolin_c3_mini/skech_smart_roller_blind.ino.bootloader.bin
 code/arduino_esp32/quick_package.bat
+.cursor/rules/rollerblind.mdc
