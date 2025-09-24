@@ -5,11 +5,11 @@
 ## 📱 系统展示
 
 ### 安装效果
-<img src="art/墙上安装效果.png" width="300" alt="墙上安装效果">
+<img src="art/墙上安装效果.png" width="500" alt="墙上安装效果">
 
 
 ### APP操作演示
-<img src="art/app_poll_uo_blinds.gif" width="300" alt="APP操作演示">
+<img src="art/app_poll_uo_blinds.gif" width="500" alt="APP操作演示">
 
 ## 🚀 快速开始
 
@@ -17,12 +17,12 @@
 
 | 组件 | 图片 | 说明 |
 |------|------|------|
-| ESP32-C3-Mini | <img src="art/esp32-c3-mini.png" width="250" alt="ESP32-C3-Mini"> | 主控制器，支持WiFi和蓝牙 |
-| A4988驱动扩展板 | <img src="art/驱动扩展板.png" width="250" alt="驱动扩展板"> | 步进电机驱动器 |
-| 42步进电机 | <img src="art/步进电机.png" width="250" alt="步进电机"> | 动力源，200步/圈 |
-| HS-0038B红外接收 | <img src="art/hs-0038b.png" width="250" alt="红外接收"> | 红外遥控接收模块 |
-| DC-DC降压模块 | <img src="art/dc-dc降压.png" width="250" alt="DC-DC降压"> | 12V转5V电源转换 |
-| 红外遥控器 | <img src="art/ir_remote_control.png" width="250" alt="红外遥控器"> | 遥控操作设备 |
+| ESP32-C3-Mini | <img src="art/esp32-c3-mini.png" width="300" alt="ESP32-C3-Mini"> | 主控制器，支持WiFi和蓝牙 |
+| A4988驱动扩展板 | <img src="art/驱动扩展板.png" width="300" alt="驱动扩展板"> | 步进电机驱动器 |
+| 42步进电机 | <img src="art/步进电机.png" width="300" alt="步进电机"> | 动力源，200步/圈 |
+| HS-0038B红外接收 | <img src="art/hs-0038b.png" width="300" alt="红外接收"> | 红外遥控接收模块 |
+| DC-DC降压模块 | <img src="art/dc-dc降压.png" width="300" alt="DC-DC降压"> | 12V转5V电源转换 |
+| 红外遥控器 | <img src="art/ir_remote_control.png" width="300" alt="红外遥控器"> | 遥控操作设备 |
 
 ### 硬件连接
 ```
