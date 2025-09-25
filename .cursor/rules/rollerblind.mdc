@@ -1,5 +1,8 @@
 ---
-description: arduino工程。核心是esp32驱动42步进电机，进行窗帘的开关。设置模式下，可以设置开关时长
+description: arduino工程。核心是esp32驱动42步进电机，进行窗帘的开关。设置模式下，可以设置开关时长。可以通过红外遥控，也可以通过app蓝牙控制。
 globs:
+    code目录： android文件夹为app工程，用于和eps32交互，通过蓝牙控制窗帘。
+               arduino_esp32为arduino工程，接收蓝牙或者红外来控制窗帘。
+               demo为之前做的一个led屏控制项目，包含app和esp32的代码。主要用来学习app和esp之间的蓝牙交互。
 alwaysApply: false
 ---

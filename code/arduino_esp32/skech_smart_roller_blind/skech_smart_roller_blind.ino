@@ -96,7 +96,39 @@ void updateIRState(uint32_t command, unsigned long currentTime) {
   lastIRTime = currentTime;
 }
 
-// 设置模式旋转处理函数
+bool executeStepControl(unsigned long stepDelay, unsigned long &lastStepTime, bool &stepState, int &totalSteps, unsigned long startTime, bool isSetMode = false) {
+  unsigned long currentTime = millis();
+  if (currentTime - lastStepTime >= stepDelay / 1000) {  // 转换为毫秒
+    // 执行步进脉冲 - 与rotateForTime完全相同的逻辑
+    if (!stepState) {
+      digitalWrite(STEP_PIN, HIGH);
+      stepState = true;
+    } else {
+      digitalWrite(STEP_PIN, LOW);
+      stepState = false;
+      lastStepTime = currentTime; // 在LOW状态时更新时间，确保时序准确
+      totalSteps++;
+      
+      // 每2000步打印一次进度
+      if (totalSteps % 2000 == 0) {
+        unsigned long elapsed = currentTime - startTime;
+        if (isSetMode) {
+          Serial.print("设置模式 - 已执行 ");
+        } else {
+          Serial.print("已执行 ");
+        }
+        Serial.print(totalSteps);
+        Serial.print(" 步，用时 ");
+        Serial.print(elapsed);
+        Serial.println(" 毫秒");
+      }
+    }
+    return true; // 执行了步进
+  }
+  return false; // 未执行步进
+}
+
+// 设置模式旋转处理函数 - 使用与rotateForTime完全相同的方法
 void handleSetModeRotation() {
   // 确保电机已启用
   digitalWrite(ENABLE_PIN, LOW);
@@ -109,6 +141,7 @@ void handleSetModeRotation() {
   static unsigned long lastSetModeTime = 0;
   static unsigned long startTime = 0;
   static bool directionSet = false;
+  static bool setModeRunning = false;
   
   // 每次进入设置模式时重新初始化所有变量
   if (timingStart != lastSetModeTime) {
@@ -118,6 +151,8 @@ void handleSetModeRotation() {
     lastSetModeTime = timingStart;
     startTime = millis();
     directionSet = false;
+    setModeRunning = true;
+    stepDelay = 1000000 / speed; // 重新计算步进延迟
   }
   
   // 设置方向（只设置一次）
@@ -132,26 +167,22 @@ void handleSetModeRotation() {
     return;
   }
   
-  // 步进控制逻辑
-  if (millis() - lastStepTime >= stepDelay / 1000) {
-    if (!stepState) {
-      digitalWrite(STEP_PIN, HIGH);
-      stepState = true;
-    } else {
-      digitalWrite(STEP_PIN, LOW);
-      stepState = false;
-      lastStepTime = millis();
-      totalSteps++;
+  // 使用与rotateForTime完全相同的执行方式：在循环中连续执行步进控制
+  if (setModeRunning) {
+    // 使用与rotateForTime完全相同的步进控制函数
+    if (executeStepControl(stepDelay, lastStepTime, stepState, totalSteps, startTime, true)) {
+      // 每10步检查一次停止标志（与rotateForTime保持一致）
+      if (totalSteps % 10 == 0) {
+        if (bleStopRequested || stopRequested) {
+          exitSetMode();
+          return;
+        }
+      }
     }
-  }
-  
-  delay(1); // 让出CPU时间
-  
-  // 每1秒显示一次计时状态
-  static unsigned long lastStatusTime = 0;
-  if (millis() - lastStatusTime > 1000) {
-    printSetModeStatus(millis() - startTime, totalSteps, stepDelay);
-    lastStatusTime = millis();
+    
+    // 与rotateForTime保持完全一致：让出CPU时间给其他任务
+    delay(1);  
+    
   }
 }
 
@@ -194,7 +225,14 @@ void printSetModeStatus(unsigned long elapsed, int totalSteps, unsigned long ste
   Serial.print(totalSteps);
   Serial.print(", 步进延迟: ");
   Serial.print(stepDelay);
-  Serial.println(" 微秒)");
+  Serial.print(" 微秒, 实际转速: ");
+  if (elapsed > 0) {
+    Serial.print((totalSteps * 1000) / elapsed);
+    Serial.print(" 步/秒");
+  } else {
+    Serial.print("计算中");
+  }
+  Serial.println(")");
 }
 
 void setup() {
@@ -245,9 +283,9 @@ void setup() {
  }
  
 void loop() {
-  // 每5秒打印一次BLE状态（用于调试）
+  // 在设置模式下减少BLE状态检查频率，避免影响电机转动
   static unsigned long lastBLEStatusTime = 0;
-  if (millis() - lastBLEStatusTime > 5000) {
+  if (!setMode && millis() - lastBLEStatusTime > 10000) { // 非设置模式下每10秒检查一次
     Serial.println(bleHandler != nullptr ? "BLE处理器状态正常" : "BLE处理器为空！");
     lastBLEStatusTime = millis();
   }
@@ -303,38 +341,51 @@ void loop() {
     uint32_t command = IrReceiver.decodedIRData.command;
     uint8_t protocol = IrReceiver.decodedIRData.protocol;
     
-    // 显示接收到的原始数据（用于调试）
-    Serial.print("0038k接收 - 协议:");
-    Serial.print(protocol);
-    Serial.print(" 地址:0x");
-    Serial.print(address, HEX);
-    Serial.print(" 命令:0x");
-    Serial.println(command, HEX);
+    // 过滤无效信号：协议:0、地址:0x0、命令:0x0 不打印
+    if (protocol == 0 && address == 0x0 && command == 0x0) {
+      IrReceiver.resume();
+      return; 
+    }
     
-    // 验证地址
+  // 在设置模式下，最小化红外信号处理，优先保证步进控制
+  if (setMode) {
+    // 设置模式下只处理有效地址的信号，快速跳过无效信号
     if (address != IR_ADDRESS) {
-      Serial.println("address not equals,return");
       IrReceiver.resume();
       return;
+    }
+    
+    // 设置模式下快速处理命令，减少阻塞时间
+    unsigned long currentTime = millis();
+    if (isValidIRCommand(command, protocol)) {
+      if (shouldProcessCommand(command, currentTime, 200)) { // 设置模式防抖时间：200ms
+        Serial.print("设置模式接收到命令: 0x");
+        Serial.println(command, HEX);
+        handleIRCommand(command);
+        updateIRState(command, currentTime);
+      }
+      // 设置模式下不输出重复命令信息，减少处理时间
+    }
+    IrReceiver.resume();
+    return;
+  } else {
+      // 非设置模式下的正常处理
+      Serial.print("0038k接收 - 协议:");
+      Serial.print(protocol);
+      Serial.print(" 地址:0x");
+      Serial.print(address, HEX);
+      Serial.print(" 命令:0x");
+      Serial.println(command, HEX);
+      
+      // 验证地址
+      if (address != IR_ADDRESS) {
+        Serial.println("address not equals,return");
+        IrReceiver.resume();
+        return;
+      }
     }
 
     unsigned long currentTime = millis();
-    
-    // 在设置模式下，只处理关键命令
-    if (setMode) {
-      if (isValidIRCommand(command, protocol)) {
-        if (shouldProcessCommand(command, currentTime, 200)) { // 设置模式防抖时间：200ms
-          Serial.print("设置模式接收到命令: 0x");
-          Serial.println(command, HEX);
-          handleIRCommand(command);
-          updateIRState(command, currentTime);
-        } else {
-          Serial.println("设置模式：重复命令，已忽略");
-        }
-      }
-      IrReceiver.resume();
-      return;
-    }
     
     // 非设置模式下的正常处理
     if (isValidIRCommand(command, protocol)) {
@@ -361,9 +412,9 @@ void loop() {
     handleSetModeRotation();
   }
   
-  // 调试输出：每10秒显示一次状态
+  // 调试输出：在非设置模式下每30秒显示一次状态，设置模式下不输出
   static unsigned long lastDebugTime = 0;
-  if (millis() - lastDebugTime > 10000) {
+  if (!setMode && millis() - lastDebugTime > 30000) {
     Serial.print("调试信息 - setMode: ");
     Serial.print(setMode ? "true" : "false");
     Serial.print(", timingInProgress: ");
@@ -373,10 +424,11 @@ void loop() {
     lastDebugTime = millis();
   }
   
-  // 只在非设置模式下添加延迟，避免影响电机转动
-  if (!setMode || !timingInProgress) {
-    delay(50); // 短暂延迟，避免过度占用CPU
+ 
+  if (!setMode) {
+    delay(10); // 避免过度占用CPU
   }
+  // 设置模式下不添加任何延迟，因为handleSetModeRotation内部已有delay(1)
   
   // 安全措施：如果不在设置模式且电机应该停止，确保电机被禁用
   if (!setMode && !motorRunning) {
@@ -422,50 +474,28 @@ void rotateForTime(int duration, bool clockwise) {
       break;
     }
     
-    // 检查是否到了执行下一步的时间
-    if (millis() - lastStepTime >= stepDelay / 1000) {  // 转换为毫秒
-      // 执行步进脉冲（非阻塞）
-      if (!stepState) {
-        digitalWrite(STEP_PIN, HIGH);
-        stepState = true;
-      } else {
-        digitalWrite(STEP_PIN, LOW);
-        stepState = false;
-        lastStepTime = millis();
-        stepCount++;
-        
-        // 每2000步打印一次进度（减少打印频率）
-        if (stepCount % 2000 == 0) {
-          unsigned long elapsed = millis() - startTime;
-          Serial.print("已执行 ");
-          Serial.print(stepCount);
-          Serial.print(" 步，用时 ");
-          Serial.print(elapsed);
-          Serial.println(" 毫秒");
-        }
-        
-        // 每10步检查一次红外信号（减少检查频率提高流畅性）
-        if (stepCount % 10 == 0) {
-          // 检查红外信号
-          if (IrReceiver.decode()) {
-            uint32_t command = IrReceiver.decodedIRData.command;
-            uint32_t address = IrReceiver.decodedIRData.address;
-            uint8_t protocol = IrReceiver.decodedIRData.protocol;
-            
-            // 只有在接收到有效的停止信号时才停止（地址不为0x0，协议不为0）
-            if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
-              Serial.println("旋转过程中接收到有效红外停止信号，立即停止");
-              stopRequested = true;
-              IrReceiver.resume();
-              break;
-            }
+    // 使用统一的步进控制函数，确保与设置模式完全一致
+    if (executeStepControl(stepDelay, lastStepTime, stepState, stepCount, startTime, false)) {
+      // 每10步检查一次红外信号（减少检查频率提高流畅性）
+      if (stepCount % 10 == 0) {
+        // 检查红外信号
+        if (IrReceiver.decode()) {
+          uint32_t command = IrReceiver.decodedIRData.command;
+          uint32_t address = IrReceiver.decodedIRData.address;
+          uint8_t protocol = IrReceiver.decodedIRData.protocol;
+          
+          // 只有在接收到有效的停止信号时才停止（地址不为0x0，协议不为0）
+          if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
+            Serial.println("旋转过程中接收到有效红外停止信号，立即停止");
+            stopRequested = true;
             IrReceiver.resume();
+            break;
           }
+          IrReceiver.resume();
         }
       }
     }
     
-    // 让出CPU时间给其他任务（包括BLE回调）
     delay(1);  // 1毫秒延迟，让BLE回调有机会执行
   }
   
