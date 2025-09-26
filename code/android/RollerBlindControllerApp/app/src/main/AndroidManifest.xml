@@ -3,15 +3,23 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.vincent.android.rollerblindcontroller">
 
-    <!-- 蓝牙权限 -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <!-- 蓝牙权限 - 兼容不同Android版本 -->
+    <!-- Android 11及以下版本的蓝牙权限 -->
+    <uses-permission android:name="android.permission.BLUETOOTH" 
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" 
+        android:maxSdkVersion="30" />
     
-    <!-- 位置权限（Android 6.0+ 蓝牙扫描需要） -->
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Android 12+ 的新蓝牙权限 -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" 
+        android:usesPermissionFlags="neverForLocation" />
+    
+    <!-- 位置权限（Android 11及以下版本蓝牙扫描需要） -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" 
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" 
+        android:maxSdkVersion="30" />
     
     <!-- 网络权限 -->
     <uses-permission android:name="android.permission.INTERNET" />

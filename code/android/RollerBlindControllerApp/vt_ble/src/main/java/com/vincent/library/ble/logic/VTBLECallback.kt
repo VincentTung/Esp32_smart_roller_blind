@@ -6,9 +6,8 @@ interface VTBLECallback {
     fun onScanFailed()
     fun onConnected(name: String?,address:String?)
     fun writeDataCallback(isSuccess: Boolean)
-    
-    // 亮度通知回调
-    fun onBrightnessReceived(brightness: Int)
+
+    fun onNotificationValueReceived(notiValue: Int)
     
     // MTU协商相关回调
     fun onMtuNegotiationSuccess(mtu: Int)

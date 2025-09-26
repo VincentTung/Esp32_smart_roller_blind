@@ -27,8 +27,8 @@ class DefaultBLECallback : VTBLECallback {
 
     }
 
-    // 亮度通知回调
-    override fun onBrightnessReceived(brightness: Int) {
+
+    override fun onNotificationValueReceived(notiValue: Int) {
         // 默认实现，子类可以重写
     }
 

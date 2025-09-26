@@ -486,15 +486,7 @@ class VTBLEController(
             handleConnectionFailure("连接超时")
         }
         
-        // 使用协程设置服务发现超时
-        serviceDiscoveryTimeoutJob = CoroutineUtil.delayInScope(SCOPE_NAME,
-            SERVICE_DISCOVERY_TIMEOUT
-        ) {
-            logd("=== 服务发现超时 ===")
-            logd("服务发现时间超过 ${SERVICE_DISCOVERY_TIMEOUT}ms")
-            disconnect()
-            handleConnectionFailure("服务发现超时")
-        }
+        // 服务发现超时将在服务发现真正开始时设置
         
         logd("正在连接设备...")
         
@@ -530,17 +522,14 @@ class VTBLEController(
                         updateConnectionState(BLEConnectionState.CONNECTED)
                         bleVTBLECallback.onConnected(device.name, device.address)
                         
-                        // 请求MTU大小 - 使用智能协商策略
+                        // 请求MTU大小 - 使用智能协商策略，PHY协商将在MTU协商完成后自动进行
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             requestMtuWithFallback(gatt)
+                        } else {
+                            // Android 5.0以下版本不支持MTU协商，直接开始PHY协商
+                            startPhyNegotiation(gatt)
                         }
                         
-                        // 开始PHY协商 - 在MTU协商之后进行
-                        startPhyNegotiation(gatt)
-                        
-                        logd("开始发现服务...")
-                        updateConnectionState(BLEConnectionState.DISCOVERING)
-                        gatt?.discoverServices()
                         startConnectionMonitor() // 连接成功后启动监控
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
@@ -593,15 +582,14 @@ class VTBLEController(
                     val characteristicUUID = characteristic.uuid.toString()
                     logd("Characteristic changed: $characteristicUUID = $stringValue")
                     
-                    // 处理亮度特征的通知
+
                     if (characteristicUUID == bleNotificationCharacteristicID) {
                         try {
-                            val brightness = stringValue.toInt()
-                            logd("收到亮度通知: $brightness")
-                            // 通知回调处理亮度值
-                            bleVTBLECallback.onBrightnessReceived(brightness)
+                            val notiValue = stringValue.toInt()
+
+                            bleVTBLECallback.onNotificationValueReceived(notiValue)
                         } catch (e: NumberFormatException) {
-                            logd("亮度值格式错误: $stringValue")
+                            logd("通知值格式错误: $stringValue")
                         }
                     }
                 }
@@ -685,18 +673,17 @@ class VTBLEController(
                 return@forEach
             }
             
-            // 检查亮度特征
+
             if (characUUID == bleNotificationCharacteristicID) {
-                logd("=== 找到亮度特征值 ===")
-                logd("亮度特征值UUID: $characUUID")
+                logd("=== 找到通知特征值 ===")
+                logd("通知特征值UUID: $characUUID")
                 foundBrightnessCharacteristic = true
-                
-                // 启用亮度特征的通知
+
                 val success = gatt.setCharacteristicNotification(characteristic, true)
-                logd("亮度特征值通知启用状态: $success")
+                logd("通知特征值通知启用状态: $success")
                 
                 if (!success) {
-                    logd("警告: 启用亮度特征值通知失败")
+                    logd("警告: 启用通知特征值通知失败")
                 }
             }
         }
@@ -707,11 +694,11 @@ class VTBLEController(
             handleConnectionFailure("未找到目标特征值")
         }
         
-        // 记录亮度特征查找结果
+
         if (foundBrightnessCharacteristic) {
-            logd("亮度特征值查找成功")
+            logd("通知特征值查找成功")
         } else {
-            logd("警告: 未找到亮度特征值")
+            logd("警告: 未找到通知特征值")
         }
     }
 
@@ -1266,6 +1253,10 @@ class VTBLEController(
             // 通知回调
             bleVTBLECallback.onMtuNegotiationSuccess(mtu)
             
+            // MTU协商完成后，开始PHY协商
+            logd("MTU协商完成，开始PHY协商")
+            startPhyNegotiation(gatt)
+            
         } else {
             logd("=== MTU协商失败 ===")
             logd("状态码: $status")
@@ -1302,6 +1293,10 @@ class VTBLEController(
         
         // 通知回调
         bleVTBLECallback.onMtuNegotiationFailed(requestedMtu, actualMtu)
+        
+        // MTU协商失败后，继续PHY协商
+        logd("MTU协商失败，继续PHY协商")
+        startPhyNegotiation(bleGatt)
     }
     
     /**
@@ -1344,7 +1339,49 @@ class VTBLEController(
         logd("PHY性能描述: ${phyManager.getPhyPerformanceDescription(optimalPhy)}")
         
         // 开始PHY协商，VTPhyManager内部处理所有重试和降级逻辑
-        phyManager.startPhyNegotiation(gatt, bleVTBLECallback)
+        phyManager.startPhyNegotiation(gatt, object : VTBLECallback by bleVTBLECallback {
+            override fun onPhyNegotiationSuccess(txPhy: Int, rxPhy: Int) {
+                logd("=== VTBLEController: PHY协商成功 ===")
+                logd("TX PHY: $txPhy, RX PHY: $rxPhy")
+                // 继续服务发现流程
+                startServiceDiscovery()
+                bleVTBLECallback.onPhyNegotiationSuccess(txPhy, rxPhy)
+            }
+            
+            override fun onPhyNegotiationFailed(requestedPhy: Int, actualPhy: Int) {
+                logd("=== VTBLEController: PHY协商失败 ===")
+                logd("请求的PHY: $requestedPhy")
+                logd("实际的PHY: $actualPhy")
+                logd("PHY协商失败，使用默认1M PHY，继续服务发现流程")
+                // PHY协商失败不影响连接，继续服务发现
+                startServiceDiscovery()
+                bleVTBLECallback.onPhyNegotiationFailed(requestedPhy, actualPhy)
+            }
+        })
+    }
+    
+    /**
+     * 开始服务发现
+     */
+    private fun startServiceDiscovery() {
+        if (bleGatt != null) {
+            logd("开始发现服务...")
+            updateConnectionState(BLEConnectionState.DISCOVERING)
+            
+            // 设置服务发现超时
+            serviceDiscoveryTimeoutJob = CoroutineUtil.delayInScope(SCOPE_NAME,
+                SERVICE_DISCOVERY_TIMEOUT
+            ) {
+                logd("=== 服务发现超时 ===")
+                logd("服务发现时间超过 ${SERVICE_DISCOVERY_TIMEOUT}ms")
+                disconnect()
+                handleConnectionFailure("服务发现超时")
+            }
+            
+            bleGatt?.discoverServices()
+        } else {
+            logd("GATT未连接，无法开始服务发现")
+        }
     }
     
 

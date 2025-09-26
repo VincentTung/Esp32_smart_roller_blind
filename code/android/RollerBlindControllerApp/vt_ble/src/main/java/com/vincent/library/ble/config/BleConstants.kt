@@ -40,8 +40,3 @@ const val MTU_OPTIMAL = 512 // 理想MTU大小
 const val MTU_FALLBACK = 256 // 降级MTU大小
 const val MTU_GOOD = 256 // 较好的MTU大小阈值
 const val MTU_ACCEPTABLE = 128 // 可接受的MTU大小阈值
-
-/**
- * 数据传输相关常量
- */
-const val BRIGHTNESS_MAX_VALUE = 255 // BLE传输中亮度值的最大值

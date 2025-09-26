@@ -8,6 +8,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -56,6 +57,10 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         logd(TAG, "onCreate")
+        logd(TAG, "Android版本: ${Build.VERSION.SDK_INT}")
+        logd(TAG, "目标SDK版本: ${Build.VERSION_CODES.S}")
+        logd(TAG, "当前API级别: ${Build.VERSION.SDK_INT}")
+        logd(TAG, "是否为Android 12+: ${Build.VERSION.SDK_INT >= Build.VERSION_CODES.S}")
         setContentView(R.layout.activity_main)
 
         rollerBlindController = RollerBlindController.getInstance()
@@ -226,8 +231,10 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
 
     private fun checkBluetoothAndPermissions() {
         if (!VTBluetoothUtil.isEnable(this)) {
+            logd(TAG, "蓝牙未启用，请求启用蓝牙")
             turnOnBluetooth()
         } else {
+            logd(TAG, "蓝牙已启用，检查权限")
             checkLocationPermission()
         }
     }
@@ -271,8 +278,10 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
 
         if (requestCode == REQUEST_ENABLE_BLUETOOTH) {
             if (resultCode == Activity.RESULT_OK) {
+                logd(TAG, "蓝牙启用成功，检查权限")
                 checkLocationPermission()
             } else {
+                logd(TAG, "蓝牙启用失败")
                 ToastUtil.show(this, R.string.turn_on_failed)
             }
         }
@@ -280,35 +289,109 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
 
     @SuppressLint("CheckResult")
     private fun checkLocationPermission() {
-        if (!rxPermission.isGranted(ACCESS_FINE_LOCATION) || 
-            !rxPermission.isGranted(BLUETOOTH_SCAN) || 
-            !rxPermission.isGranted(BLUETOOTH_CONNECT)) {
-            rxPermission.request(ACCESS_FINE_LOCATION, BLUETOOTH_SCAN, BLUETOOTH_CONNECT)
+        val permissionsToRequest = mutableListOf<String>()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ 需要新的蓝牙权限
+            if (!rxPermission.isGranted(BLUETOOTH_SCAN)) {
+                permissionsToRequest.add(BLUETOOTH_SCAN)
+            }
+            if (!rxPermission.isGranted(BLUETOOTH_CONNECT)) {
+                permissionsToRequest.add(BLUETOOTH_CONNECT)
+            }
+        } else {
+            // Android 11及以下需要位置权限
+            if (!rxPermission.isGranted(ACCESS_FINE_LOCATION)) {
+                permissionsToRequest.add(ACCESS_FINE_LOCATION)
+            }
+        }
+        
+        if (permissionsToRequest.isNotEmpty()) {
+            logd(TAG, "请求权限: ${permissionsToRequest.joinToString(", ")}")
+            rxPermission.request(*permissionsToRequest.toTypedArray())
                 .subscribe(Consumer { isGranted ->
+                    logd(TAG, "权限请求结果: $isGranted")
                     if (isGranted) {
+                        // 权限授予后，直接尝试连接设备
+                        logd(TAG, "权限授予成功，开始连接设备")
                         connectToDevice()
                     } else {
+                        logd(TAG, "权限授予失败")
                         ToastUtil.show(this, R.string.require_permission_failed)
                     }
                 })
         } else {
+            logd(TAG, "所有权限已授予，开始连接设备")
             connectToDevice()
         }
     }
 
     private fun connectToDevice() {
         logd(TAG, "开始连接设备")
+        
+        // 在连接前再次检查权限
+        if (!hasRequiredBluetoothPermissions()) {
+            logd(TAG, "权限不足，重新请求权限")
+            checkLocationPermission()
+            return
+        }
+        
+        // 额外检查：确保蓝牙适配器可用
+        if (!VTBluetoothUtil.isEnable(this)) {
+            logd(TAG, "蓝牙未启用，无法连接设备")
+            ToastUtil.show(this, "蓝牙未启用，请先启用蓝牙")
+            return
+        }
+        
+        logd(TAG, "所有检查通过，开始连接设备")
         startLoading(getString(R.string.connecting_device))
         // 使用RollerBlindController进行连接
         rollerBlindController.connect(this)
     }
+    
+    /**
+     * 检查是否有足够的蓝牙权限
+     */
+    private fun hasRequiredBluetoothPermissions(): Boolean {
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Android 12+ 需要新的蓝牙权限
+            val hasScan = rxPermission.isGranted(BLUETOOTH_SCAN)
+            val hasConnect = rxPermission.isGranted(BLUETOOTH_CONNECT)
+            logd(TAG, "Android 12+ 权限检查: BLUETOOTH_SCAN=$hasScan, BLUETOOTH_CONNECT=$hasConnect")
+            hasScan && hasConnect
+        } else {
+            // Android 11及以下需要位置权限
+            val hasLocation = rxPermission.isGranted(ACCESS_FINE_LOCATION)
+            logd(TAG, "Android 11及以下权限检查: ACCESS_FINE_LOCATION=$hasLocation")
+            logd(TAG, "Android 11及以下版本，BLUETOOTH和BLUETOOTH_ADMIN为安装时权限")
+            
+            // 额外检查：确保蓝牙适配器可用
+            val bluetoothEnabled = VTBluetoothUtil.isEnable(this)
+            logd(TAG, "蓝牙适配器状态: $bluetoothEnabled")
+            
+            hasLocation && bluetoothEnabled
+        }
+        logd(TAG, "权限检查结果: $result")
+        return result
+    }
 
     @SuppressLint("MissingPermission")
     private fun turnOnBluetooth() {
-        if (!rxPermission.isGranted(BLUETOOTH_CONNECT)) {
-            rxPermission.request(BLUETOOTH_CONNECT)
+        // 检查是否有足够的权限来启用蓝牙
+        val hasPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            rxPermission.isGranted(BLUETOOTH_CONNECT)
+        } else {
+            // Android 11及以下版本，BLUETOOTH_CONNECT权限不存在，直接返回true
+            true
+        }
+        
+        if (!hasPermission) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                rxPermission.request(BLUETOOTH_CONNECT)
+            }
             return
         }
+        
         val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
         startActivityForResult(enableBtIntent, REQUEST_ENABLE_BLUETOOTH)
     }
@@ -331,8 +414,7 @@ class MainActivity : VTBaseActivity(), VTBLECallback {
         logd(TAG, "BLE特征值检查成功")
     }
 
-    override fun onBrightnessReceived(brightness: Int) {
-        // 窗帘控制器不需要亮度功能
+    override fun onNotificationValueReceived(notiValue: Int) {
     }
 
     override fun onDisConnected() {

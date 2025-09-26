@@ -154,15 +154,39 @@ class VTPhyManager(private val context: Context) {
         phyNegotiationRetryCount = 0
         
         val optimalPhy = getOptimalPhy()
+        val supportedPhys = getSupportedPhys()
         
         logd("=== 开始PHY协商 ===")
         logd("目标PHY: $optimalPhy")
         logd("当前Android版本: ${Build.VERSION.SDK_INT}")
+        logd("设备支持的PHY: $supportedPhys")
         
         // 检查API版本要求
         if (!isPhyNegotiationSupported()) {
             logd("当前Android版本不支持PHY协商 (需要API 26+)")
             handlePhyNegotiationFailure(optimalPhy, PHY_1M)
+            return
+        }
+        
+        // 如果设备只支持1M PHY，不需要进行PHY协商
+        if (supportedPhys.size == 1 && supportedPhys.contains(PHY_1M)) {
+            logd("设备只支持1M PHY，无需进行PHY协商")
+            logd("1M PHY是默认PHY，直接标记为成功")
+            phyNegotiationFailed = false
+            currentTxPhy = PHY_1M
+            currentRxPhy = PHY_1M
+            callback.onPhyNegotiationSuccess(PHY_1M, PHY_1M)
+            return
+        }
+        
+        // 如果目标PHY就是1M PHY，也不需要协商
+        if (optimalPhy == PHY_1M) {
+            logd("目标PHY是1M PHY，无需进行PHY协商")
+            logd("1M PHY是默认PHY，直接标记为成功")
+            phyNegotiationFailed = false
+            currentTxPhy = PHY_1M
+            currentRxPhy = PHY_1M
+            callback.onPhyNegotiationSuccess(PHY_1M, PHY_1M)
             return
         }
         
@@ -297,35 +321,15 @@ class VTPhyManager(private val context: Context) {
         logd("=== PHY协商失败 ===")
         logd("请求的PHY: $requestedPhy")
         logd("实际的PHY: $actualPhy")
+        logd("PHY协商失败，使用默认1M PHY")
         
-        if (phyNegotiationRetryCount < PHY_NEGOTIATION_RETRY_COUNT) {
-            phyNegotiationRetryCount++
-            logd("准备第 $phyNegotiationRetryCount 次PHY协商重试...")
-            
-            phyRetryJob = CoroutineUtil.delayInScope(SCOPE_NAME, PHY_NEGOTIATION_RETRY_DELAY) {
-                logd("开始PHY协商重试...")
-                // 重试时使用降级的PHY
-                val fallbackPhy = when (requestedPhy) {
-                    PHY_2M -> PHY_1M
-                    PHY_CODED -> PHY_2M
-                    else -> PHY_1M
-                }
-                
-                if (fallbackPhy != requestedPhy) {
-                    logd("降级到PHY: $fallbackPhy")
-                    // 通知回调，让外部决定是否重试
-                    phyCallback?.onPhyNegotiationFailed(requestedPhy, actualPhy)
-                } else {
-                    logd("无法进一步降级PHY")
-                    phyNegotiationFailed = true
-                    phyCallback?.onPhyNegotiationFailed(requestedPhy, actualPhy)
-                }
-            }
-        } else {
-            logd("PHY协商重试次数已达上限")
-            phyNegotiationFailed = true
-            phyCallback?.onPhyNegotiationFailed(requestedPhy, actualPhy)
-        }
+        // 直接使用默认的1M PHY，不进行重试
+        phyNegotiationFailed = false  // 标记为成功，因为使用默认PHY
+        currentTxPhy = PHY_1M
+        currentRxPhy = PHY_1M
+        
+        // 通知回调PHY协商成功（使用默认PHY）
+        phyCallback?.onPhyNegotiationSuccess(PHY_1M, PHY_1M)
     }
     
     /**
