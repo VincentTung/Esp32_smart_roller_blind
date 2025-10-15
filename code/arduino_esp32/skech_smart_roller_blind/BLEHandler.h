@@ -2,6 +2,8 @@
 #define BLE_HANDLER_H
 
 #include "config.h"
+
+#if ENABLE_BLE
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -92,5 +94,7 @@ private:
     void createCharacteristics();
     void setupCallbacks();
 };
+
+#endif // ENABLE_BLE
 
 #endif // BLE_HANDLER_H

@@ -46,8 +46,24 @@ const int DEFAULT_IS_NORMAL_DIRECTION = true;
 #define EEPROM_DIRECTION_INIT_FLAG_ADDR 5  // 方向设置初始化标志地址
 
 // BLE配置
+#define ENABLE_BLE false  // 蓝牙开关：true=开启，false=关闭（节省电量）
 #define BLE_DEVICE_NAME "SmartRollerBlind"
 #define BLE_SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
 #define BLE_CHARACTERISTIC_CONTROL_UUID "12345678-1234-1234-1234-123456789def"
+
+// 电源管理配置
+#define ENABLE_DEBUG_OUTPUT true  // 调试输出开关：true=开启，false=关闭（节省电量）
+#define IDLE_DELAY_MS 50          // 空闲时延迟（毫秒），降低CPU使用率
+
+// 调试输出宏定义
+#if ENABLE_DEBUG_OUTPUT
+  #define DEBUG_PRINT(x) Serial.print(x)
+  #define DEBUG_PRINTLN(x) Serial.println(x)
+  #define DEBUG_PRINTF(x, ...) Serial.printf(x, __VA_ARGS__)
+#else
+  #define DEBUG_PRINT(x)
+  #define DEBUG_PRINTLN(x)
+  #define DEBUG_PRINTF(x, ...)
+#endif
 
 #endif // 

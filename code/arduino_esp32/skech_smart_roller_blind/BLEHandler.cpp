@@ -1,6 +1,8 @@
 #include "BLEHandler.h"
 #include <Arduino.h>
 
+#if ENABLE_BLE
+
 // BLEHandler静态实例指针初始化
 BLEHandler* BLEHandler::instance = nullptr;
 
@@ -203,3 +205,5 @@ void BLEHandler::setCommandCallbacks(
     
     Serial.println("BLE命令回调函数已设置");
 }
+
+#endif // ENABLE_BLE

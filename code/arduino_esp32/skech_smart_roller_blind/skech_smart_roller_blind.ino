@@ -53,7 +53,10 @@ unsigned long lastIRTime = 0;
 const unsigned long IR_DEBOUNCE_TIME = 200; // 200ms防抖时间
 
 // BLE处理器
+#if ENABLE_BLE
 BLEHandler* bleHandler = nullptr;
+#endif
+
 
 // BLE命令队列（用于非阻塞处理）
 volatile bool bleStopRequested = false;
@@ -95,6 +98,8 @@ void updateIRState(uint32_t command, unsigned long currentTime) {
   lastIRCommand = command;
   lastIRTime = currentTime;
 }
+
+// 电源管理函数（简化版 - 已移除睡眠逻辑）
 
 bool executeStepControl(unsigned long stepDelay, unsigned long &lastStepTime, bool &stepState, int &totalSteps, unsigned long startTime, bool isSetMode = false) {
   unsigned long currentTime = millis();
@@ -162,10 +167,17 @@ void handleSetModeRotation() {
   }
   
   // 检查停止标志
-  if (bleStopRequested || stopRequested) {
-    exitSetMode();
-    return;
-  }
+  #if ENABLE_BLE
+    if (bleStopRequested || stopRequested) {
+      exitSetMode();
+      return;
+    }
+  #else
+    if (stopRequested) {
+      exitSetMode();
+      return;
+    }
+  #endif
   
   // 使用与rotateForTime完全相同的执行方式：在循环中连续执行步进控制
   if (setModeRunning) {
@@ -173,10 +185,17 @@ void handleSetModeRotation() {
     if (executeStepControl(stepDelay, lastStepTime, stepState, totalSteps, startTime, true)) {
       // 每10步检查一次停止标志（与rotateForTime保持一致）
       if (totalSteps % 10 == 0) {
-        if (bleStopRequested || stopRequested) {
-          exitSetMode();
-          return;
-        }
+        #if ENABLE_BLE
+          if (bleStopRequested || stopRequested) {
+            exitSetMode();
+            return;
+          }
+        #else
+          if (stopRequested) {
+            exitSetMode();
+            return;
+          }
+        #endif
       }
     }
     
@@ -210,7 +229,9 @@ void exitSetMode() {
   
   // 清除停止标志
   stopRequested = false;
-  bleStopRequested = false;
+  #if ENABLE_BLE
+    bleStopRequested = false;
+  #endif
   
   Serial.println("=== 退出设置模式 ===");
 }
@@ -237,7 +258,7 @@ void printSetModeStatus(unsigned long elapsed, int totalSteps, unsigned long ste
 
 void setup() {
    Serial.begin(9600);
-   Serial.println("ESP32 + A4988 步进电机 + 红外控制");
+   DEBUG_PRINTLN("ESP32-C3 + A4988 步进电机 + 红外控制");
    
    // 设置引脚
    pinMode(STEP_PIN, OUTPUT);
@@ -256,27 +277,37 @@ void setup() {
   // 初始化红外接收 (0038k模块)
   IrReceiver.begin(IR_RECEIVE_PIN, false);
   
-  // 初始化BLE
-  bleHandler = new BLEHandler();
-  bleHandler->init();
-  bleHandler->setCommandCallbacks(
-    handleBLEUpCommand,      // 升起窗帘
-    handleBLEDownCommand,    // 放下窗帘
-    handleBLELeftCommand,    // 微调升起
-    handleBLERightCommand,   // 微调放下
-    handleBLEStopCommand,    // 停止电机
-    handleBLESetCommand,     // 设置模式
-    handleBLEDirectionCommand // 切换方向
-  );
-  bleHandler->startAdvertising();
+  // 初始化BLE（根据配置决定）
+  #if ENABLE_BLE
+    bleHandler = new BLEHandler();
+    bleHandler->init();
+    bleHandler->setCommandCallbacks(
+      handleBLEUpCommand,      // 升起窗帘
+      handleBLEDownCommand,    // 放下窗帘
+      handleBLELeftCommand,    // 微调升起
+      handleBLERightCommand,   // 微调放下
+      handleBLEStopCommand,    // 停止电机
+      handleBLESetCommand,     // 设置模式
+      handleBLEDirectionCommand // 切换方向
+    );
+    bleHandler->startAdvertising();
+    Serial.println("BLE已初始化并开始广播");
+  #else
+    Serial.println("BLE已禁用（节省电量）");
+  #endif
   
   // 初始化窗帘状态标志位
   isFullyRolledUp = false;
   isFullyRolledDown = false;
   
-  Serial.println("电机已启用，0038k红外接收模块已初始化");
-  Serial.println("BLE已初始化并开始广播");
-  Serial.println("等待红外命令或BLE命令...");
+  // 初始化完成
+  
+  DEBUG_PRINTLN("电机已启用，0038k红外接收模块已初始化");
+  #if ENABLE_BLE
+    Serial.println("等待红外命令或BLE命令...");
+  #else
+    Serial.println("等待红外命令...");
+  #endif
   printIRCommands();
    
 
@@ -284,56 +315,60 @@ void setup() {
  
 void loop() {
   // 在设置模式下减少BLE状态检查频率，避免影响电机转动
-  static unsigned long lastBLEStatusTime = 0;
-  if (!setMode && millis() - lastBLEStatusTime > 10000) { // 非设置模式下每10秒检查一次
-    Serial.println(bleHandler != nullptr ? "BLE处理器状态正常" : "BLE处理器为空！");
-    lastBLEStatusTime = millis();
-  }
+  #if ENABLE_BLE
+    static unsigned long lastBLEStatusTime = 0;
+    if (!setMode && millis() - lastBLEStatusTime > 10000) { // 非设置模式下每10秒检查一次
+      DEBUG_PRINTLN(bleHandler != nullptr ? "BLE处理器状态正常" : "BLE处理器为空！");
+      lastBLEStatusTime = millis();
+    }
+  #endif
   
   // 处理BLE命令队列（优先级最高）
-  if (bleStopRequested) {
-    bleStopRequested = false;
-    stopRequested = true;
-    stopMotor();
-  }
-  
-  if (bleUpRequested) {
-    bleUpRequested = false;
-    if (!isFullyRolledUp) {
-      resetCurtainState();
-      rollUpCurtain();
+  #if ENABLE_BLE
+    if (bleStopRequested) {
+      bleStopRequested = false;
+      stopRequested = true;
+      stopMotor();
     }
-  }
-  
-  if (bleDownRequested) {
-    bleDownRequested = false;
-    if (!isFullyRolledDown) {
-      resetCurtainState();
-      layDownCurtain();
+    
+    if (bleUpRequested) {
+      bleUpRequested = false;
+      if (!isFullyRolledUp) {
+        resetCurtainState();
+        rollUpCurtain();
+      }
     }
-  }
-  
-  if (bleLeftRequested) {
-    bleLeftRequested = false;
-    resetCurtainState();
-    rotateForTime(SIDE_KEY_TIME, getDirection(true)); // 微调升起
-  }
-  
-  if (bleRightRequested) {
-    bleRightRequested = false;
-    resetCurtainState();
-    rotateForTime(SIDE_KEY_TIME, getDirection(false)); // 微调放下
-  }
-  
-  if (bleSetRequested) {
-    bleSetRequested = false;
-    handleSetKey();
-  }
-  
-  if (bleDirectionRequested) {
-    bleDirectionRequested = false;
-    handleDirectionKey();
-  }
+    
+    if (bleDownRequested) {
+      bleDownRequested = false;
+      if (!isFullyRolledDown) {
+        resetCurtainState();
+        layDownCurtain();
+      }
+    }
+    
+    if (bleLeftRequested) {
+      bleLeftRequested = false;
+      resetCurtainState();
+      rotateForTime(SIDE_KEY_TIME, getDirection(true)); // 微调升起
+    }
+    
+    if (bleRightRequested) {
+      bleRightRequested = false;
+      resetCurtainState();
+      rotateForTime(SIDE_KEY_TIME, getDirection(false)); // 微调放下
+    }
+    
+    if (bleSetRequested) {
+      bleSetRequested = false;
+      handleSetKey();
+    }
+    
+    if (bleDirectionRequested) {
+      bleDirectionRequested = false;
+      handleDirectionKey();
+    }
+  #endif
   
   // 检查红外信号
   if (IrReceiver.decode()) {
@@ -415,18 +450,19 @@ void loop() {
   // 调试输出：在非设置模式下每30秒显示一次状态，设置模式下不输出
   static unsigned long lastDebugTime = 0;
   if (!setMode && millis() - lastDebugTime > 30000) {
-    Serial.print("调试信息 - setMode: ");
-    Serial.print(setMode ? "true" : "false");
-    Serial.print(", timingInProgress: ");
-    Serial.print(timingInProgress ? "true" : "false");
-    Serial.print(", motorRunning: ");
-    Serial.println(motorRunning ? "true" : "false");
+    DEBUG_PRINT("调试信息 - setMode: ");
+    DEBUG_PRINT(setMode ? "true" : "false");
+    DEBUG_PRINT(", timingInProgress: ");
+    DEBUG_PRINT(timingInProgress ? "true" : "false");
+    DEBUG_PRINT(", motorRunning: ");
+    DEBUG_PRINTLN(motorRunning ? "true" : "false");
     lastDebugTime = millis();
   }
   
+  // 正常运行
  
   if (!setMode) {
-    delay(10); // 避免过度占用CPU
+    delay(IDLE_DELAY_MS); // 使用配置的延迟时间，避免过度占用CPU
   }
   // 设置模式下不添加任何延迟，因为handleSetModeRotation内部已有delay(1)
   
@@ -463,11 +499,13 @@ void rotateForTime(int duration, bool clockwise) {
   bool stepState = false;  // 移除static，每次调用函数时重新初始化
   while (millis() - startTime < duration) {
     // 每次循环都检查停止标志（提高响应速度）
-    if (bleStopRequested) {
-      Serial.println("旋转过程中接收到BLE停止命令，立即停止");
-      bleStopRequested = false;  // 清除标志
-      break;
-    }
+    #if ENABLE_BLE
+      if (bleStopRequested) {
+        Serial.println("旋转过程中接收到BLE停止命令，立即停止");
+        bleStopRequested = false;  // 清除标志
+        break;
+      }
+    #endif
     
     if (stopRequested) {
       Serial.println("旋转过程中接收到停止命令，立即停止");
@@ -538,18 +576,18 @@ void printIRCommands() {
  
 // 处理红外命令
 void handleIRCommand(uint32_t command) {
-  Serial.print("接收到有效红外命令: 0x");
-  Serial.println(command, HEX);
+  DEBUG_PRINT("接收到有效红外命令: 0x");
+  DEBUG_PRINTF("%X\n", command);
   
   switch (command) {
     case IR_KEY_UP:
       if (isFullyRolledUp) {
-        Serial.println("窗帘已经完全升起，停止动作");
+        DEBUG_PRINTLN("窗帘已经完全升起，停止动作");
         break;
       }
-      Serial.println("执行: 窗帘升起");
-      Serial.print("isNormalDirection = ");
-      Serial.println(isNormalDirection ? "true" : "false");
+      DEBUG_PRINTLN("执行: 窗帘升起");
+      DEBUG_PRINT("isNormalDirection = ");
+      DEBUG_PRINTLN(isNormalDirection ? "true" : "false");
       isFullyRolledDown = false;
       isFullyRolledUp = false;
       rollUpCurtain();
@@ -680,7 +718,9 @@ void handleSetKey() {
     
     // 清除停止标志
     stopRequested = false;
-    bleStopRequested = false;
+    #if ENABLE_BLE
+      bleStopRequested = false;
+    #endif
     
      // 开始关闭窗帘（放下方向）
      digitalWrite(ENABLE_PIN, LOW);  // 启用电机
@@ -696,7 +736,9 @@ void handleSetKey() {
     // 在设置模式中，设置停止标志（使用和BLE停止相同的方式）
     Serial.println("第二次按下SET键，设置停止标志");
     stopRequested = true;
-    bleStopRequested = true;  // 同时设置BLE停止标志，确保rotateForTime能检测到
+    #if ENABLE_BLE
+      bleStopRequested = true;  // 同时设置BLE停止标志，确保rotateForTime能检测到
+    #endif
   }
 }
 
@@ -848,37 +890,37 @@ void loadDirectionSetting() {
 // ============================================================================
 
 void handleBLEUpCommand() {
-  Serial.println("=== BLE命令: 升起窗帘 ===");
+  DEBUG_PRINTLN("=== BLE命令: 升起窗帘 ===");
   bleUpRequested = true;
 }
 
 void handleBLEDownCommand() {
-  Serial.println("=== BLE命令: 放下窗帘 ===");
+  DEBUG_PRINTLN("=== BLE命令: 放下窗帘 ===");
   bleDownRequested = true;
 }
 
 void handleBLELeftCommand() {
-  Serial.println("=== BLE命令: 微调升起 ===");
+  DEBUG_PRINTLN("=== BLE命令: 微调升起 ===");
   bleLeftRequested = true;
 }
 
 void handleBLERightCommand() {
-  Serial.println("=== BLE命令: 微调放下 ===");
+  DEBUG_PRINTLN("=== BLE命令: 微调放下 ===");
   bleRightRequested = true;
 }
 
 void handleBLEStopCommand() {
-  Serial.println("=== BLE命令: 停止电机 ===");
+  DEBUG_PRINTLN("=== BLE命令: 停止电机 ===");
   bleStopRequested = true;
 }
 
 void handleBLESetCommand() {
-  Serial.println("=== BLE命令: 设置模式 ===");
+  DEBUG_PRINTLN("=== BLE命令: 设置模式 ===");
   bleSetRequested = true;
 }
 
 void handleBLEDirectionCommand() {
-  Serial.println("=== BLE命令: 切换方向 ===");
+  DEBUG_PRINTLN("=== BLE命令: 切换方向 ===");
   bleDirectionRequested = true;
 }
 
