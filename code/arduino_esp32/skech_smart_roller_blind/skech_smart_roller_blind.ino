@@ -17,13 +17,8 @@
 #include "BLEHandler.h"
 
 
- // 电机参数
- const int STEPS_PER_REVOLUTION = 200;  // 42步进电机全步进
- const int MICROSTEPS = 16;  // 1/16微步进
- const int TOTAL_STEPS = STEPS_PER_REVOLUTION * MICROSTEPS;  // 3200步/圈
- 
-// 速度设置
-int speed = 600;  // 步/秒 (流畅转动)
+// 电机参数（从config.h获取）
+int speed = DEFAULT_MOTOR_SPEED;  // 步/秒 (流畅转动)
 
 // 窗帘控制时间设置
 int currentCurtainTime = DEFAULT_CURTAIN_TIME;  // 窗帘开关时间 (毫秒) - 可修改
@@ -238,22 +233,22 @@ void exitSetMode() {
 
 // 打印设置模式状态
 void printSetModeStatus(unsigned long elapsed, int totalSteps, unsigned long stepDelay) {
-  Serial.print("设置模式 - 已计时: ");
-  Serial.print(elapsed);
-  Serial.print(" 毫秒 (转速: ");
-  Serial.print(speed);
-  Serial.print(" 步/秒, 总步数: ");
-  Serial.print(totalSteps);
-  Serial.print(", 步进延迟: ");
-  Serial.print(stepDelay);
-  Serial.print(" 微秒, 实际转速: ");
+  DEBUG_PRINT("设置模式 - 已计时: ");
+  DEBUG_PRINT(elapsed);
+  DEBUG_PRINT(" 毫秒 (转速: ");
+  DEBUG_PRINT(speed);
+  DEBUG_PRINT(" 步/秒, 总步数: ");
+  DEBUG_PRINT(totalSteps);
+  DEBUG_PRINT(", 步进延迟: ");
+  DEBUG_PRINT(stepDelay);
+  DEBUG_PRINT(" 微秒, 实际转速: ");
   if (elapsed > 0) {
-    Serial.print((totalSteps * 1000) / elapsed);
-    Serial.print(" 步/秒");
+    DEBUG_PRINT((totalSteps * 1000) / elapsed);
+    DEBUG_PRINT(" 步/秒");
   } else {
-    Serial.print("计算中");
+    DEBUG_PRINT("计算中");
   }
-  Serial.println(")");
+  DEBUG_PRINTLN(")");
 }
 
 void setup() {
@@ -551,10 +546,10 @@ void rotateForTime(int duration, bool clockwise) {
 
 // 设置速度
 void setSpeed(int newSpeed) {
-  speed = constrain(newSpeed, 200, 1000);  // 限制速度范围，流畅转动设置
-  Serial.print("速度设置为: ");
-  Serial.print(speed);
-  Serial.println(" 步/秒");
+  speed = constrain(newSpeed, MIN_MOTOR_SPEED, MAX_MOTOR_SPEED);  // 限制速度范围，流畅转动设置
+  DEBUG_PRINT("速度设置为: ");
+  DEBUG_PRINT(speed);
+  DEBUG_PRINTLN(" 步/秒");
 }
  
 // 打印红外命令说明
@@ -657,9 +652,9 @@ void stopMotor() {
 // 打开窗帘
 void rollUpCurtain() {
   Serial.println("=== 开始升起窗帘 ===");
-  Serial.print("当前速度设置: ");
-  Serial.print(speed);
-  Serial.println(" 步/秒");
+  DEBUG_PRINT("当前速度设置: ");
+  DEBUG_PRINT(speed);
+  DEBUG_PRINTLN(" 步/秒");
   
   motorRunning = true;
   stopRequested = false;  // 重置停止标志
@@ -707,9 +702,9 @@ void handleSetKey() {
   if (!setMode) {
     // 进入设置模式并开始计时关闭
     Serial.println("=== 进入设置模式 ===");
-    Serial.print("当前转速: ");
-    Serial.print(speed);
-    Serial.println(" 步/秒 (流畅转动设置，与正常使用转速一致)");
+    DEBUG_PRINT("当前转速: ");
+    DEBUG_PRINT(speed);
+    DEBUG_PRINTLN(" 步/秒 (流畅转动设置，与正常使用转速一致)");
     Serial.println("开始计时关闭窗帘，观察窗帘完全关闭后按设置键停止");
     
     setMode = true;
@@ -728,9 +723,9 @@ void handleSetKey() {
      motorRunning = true;
     
     Serial.println("设置模式：电机已启动，开始持续转动");
-    Serial.print("方向: 放下方向, 转速: ");
-    Serial.print(speed);
-    Serial.println(" 步/秒");
+    DEBUG_PRINT("方向: 放下方向, 转速: ");
+    DEBUG_PRINT(speed);
+    DEBUG_PRINTLN(" 步/秒");
     
   } else {
     // 在设置模式中，设置停止标志（使用和BLE停止相同的方式）

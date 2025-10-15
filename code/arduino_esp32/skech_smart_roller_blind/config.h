@@ -51,6 +51,14 @@ const int DEFAULT_IS_NORMAL_DIRECTION = true;
 #define BLE_SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
 #define BLE_CHARACTERISTIC_CONTROL_UUID "12345678-1234-1234-1234-123456789def"
 
+// 步进电机配置
+#define STEPS_PER_REVOLUTION 200  // 42步进电机全步进
+#define MICROSTEPS 16             // 1/16微步进
+#define TOTAL_STEPS (STEPS_PER_REVOLUTION * MICROSTEPS)  // 3200步/圈
+#define DEFAULT_MOTOR_SPEED 600   // 默认电机转速（步/秒）
+#define MIN_MOTOR_SPEED 200       // 最小电机转速（步/秒）
+#define MAX_MOTOR_SPEED 1000      // 最大电机转速（步/秒）
+
 // 电源管理配置
 #define ENABLE_DEBUG_OUTPUT true  // 调试输出开关：true=开启，false=关闭（节省电量）
 #define IDLE_DELAY_MS 50          // 空闲时延迟（毫秒），降低CPU使用率
