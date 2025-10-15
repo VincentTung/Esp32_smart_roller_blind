@@ -46,16 +46,22 @@ const int DEFAULT_IS_NORMAL_DIRECTION = true;
 #define EEPROM_DIRECTION_INIT_FLAG_ADDR 5  // 方向设置初始化标志地址
 
 // BLE配置
-#define ENABLE_BLE false  // 蓝牙开关：true=开启，false=关闭（节省电量）
+#define ENABLE_BLE true  // 蓝牙开关：true=开启，false=关闭（节省电量）
 #define BLE_DEVICE_NAME "SmartRollerBlind"
 #define BLE_SERVICE_UUID "12345678-1234-1234-1234-123456789abc"
 #define BLE_CHARACTERISTIC_CONTROL_UUID "12345678-1234-1234-1234-123456789def"
 
-// 步进电机配置
-#define STEPS_PER_REVOLUTION 200  // 42步进电机全步进
-#define MICROSTEPS 16             // 1/16微步进
-#define TOTAL_STEPS (STEPS_PER_REVOLUTION * MICROSTEPS)  // 3200步/圈
-#define DEFAULT_MOTOR_SPEED 600   // 默认电机转速（步/秒）
+//微步分辨率配置
+// MS1/2/3
+// 默认步距角电机：200步/圈（1.8°）
+// L/L/L: 全步进 (1/1) → 200步/圈
+// H/L/L: 1/2 微步 → 400步/圈
+// L/H/L: 1/4 微步 → 800步/圈
+// H/H/L: 1/8 微步 → 1600步/圈
+// H/H/H: 1/16 微步 → 3200步/圈
+
+// 步进电机配置         // 全步进
+#define DEFAULT_MOTOR_SPEED 1000   // 默认电机转速（步/秒）
 #define MIN_MOTOR_SPEED 200       // 最小电机转速（步/秒）
 #define MAX_MOTOR_SPEED 1000      // 最大电机转速（步/秒）
 
