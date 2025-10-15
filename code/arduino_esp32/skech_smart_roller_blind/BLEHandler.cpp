@@ -160,7 +160,15 @@ void BLEHandler::setupCallbacks() {
 
 void BLEHandler::startAdvertising() {
     Serial.println("开始BLE广播");
-    pServer->getAdvertising()->start();
+    
+    // 设置广播参数
+    BLEAdvertising *pAdvertising = pServer->getAdvertising();
+    pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);  // 设置最小连接间隔
+    pAdvertising->setMaxPreferred(0x12);  // 设置最大连接间隔
+    
+    pAdvertising->start();
+    Serial.println("BLE广播已启动，设备名称: " + String(BLE_DEVICE_NAME));
 }
 
 void BLEHandler::stopAdvertising() {
