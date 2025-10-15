@@ -94,6 +94,27 @@ void updateIRState(uint32_t command, unsigned long currentTime) {
   lastIRTime = currentTime;
 }
 
+// 辅助函数：打印红外信号详细信息
+void printIRSignal(uint32_t address, uint32_t command, uint8_t protocol, const char* context = "") {
+  DEBUG_PRINT("红外信号");
+  if (strlen(context) > 0) {
+    DEBUG_PRINT(" [");
+    DEBUG_PRINT(context);
+    DEBUG_PRINT("]");
+  }
+  DEBUG_PRINT(" - 协议:");
+  DEBUG_PRINT(protocol);
+  DEBUG_PRINT(" 地址:0x");
+  DEBUG_PRINTF("%X", address);
+  DEBUG_PRINT(" 命令:0x");
+  DEBUG_PRINTF("%X", command);
+  DEBUG_PRINT(" 位数:");
+  DEBUG_PRINT(IrReceiver.decodedIRData.numberOfBits);
+  DEBUG_PRINT(" 标志:");
+  DEBUG_PRINTF("%X", IrReceiver.decodedIRData.flags);
+  DEBUG_PRINTLN();
+}
+
 // 电源管理函数（简化版 - 已移除睡眠逻辑）
 
 bool executeStepControl(unsigned long stepDelay, unsigned long &lastStepTime, bool &stepState, int &totalSteps, unsigned long startTime, bool isSetMode = false) {
@@ -270,7 +291,10 @@ void setup() {
   // 读取存储的方向设置
   loadDirectionSetting();
   // 初始化红外接收 (0038k模块)
+  DEBUG_PRINT("初始化红外接收模块，引脚: ");
+  DEBUG_PRINTLN(IR_RECEIVE_PIN);
   IrReceiver.begin(IR_RECEIVE_PIN, false);
+  DEBUG_PRINTLN("红外接收模块初始化完成");
   
   // 初始化BLE（根据配置决定）
   #if ENABLE_BLE
@@ -367,12 +391,17 @@ void loop() {
   
   // 检查红外信号
   if (IrReceiver.decode()) {
+    DEBUG_PRINTLN("检测到红外信号！");
     uint32_t address = IrReceiver.decodedIRData.address;
     uint32_t command = IrReceiver.decodedIRData.command;
     uint8_t protocol = IrReceiver.decodedIRData.protocol;
     
-    // 过滤无效信号：协议:0、地址:0x0、命令:0x0 不打印
+    // 打印所有接收到的红外信号（包括无效信号）
+    printIRSignal(address, command, protocol, "接收");
+    
+    // 过滤无效信号：协议:0、地址:0x0、命令:0x0 不处理
     if (protocol == 0 && address == 0x0 && command == 0x0) {
+      DEBUG_PRINTLN("无效信号，忽略");
       IrReceiver.resume();
       return; 
     }
@@ -389,30 +418,31 @@ void loop() {
     unsigned long currentTime = millis();
     if (isValidIRCommand(command, protocol)) {
       if (shouldProcessCommand(command, currentTime, 200)) { // 设置模式防抖时间：200ms
-        Serial.print("设置模式接收到命令: 0x");
-        Serial.println(command, HEX);
+        DEBUG_PRINT("设置模式接收到有效命令: 0x");
+        DEBUG_PRINTF("%X\n", command);
         handleIRCommand(command);
         updateIRState(command, currentTime);
+      } else {
+        DEBUG_PRINTLN("设置模式：重复命令，忽略");
       }
-      // 设置模式下不输出重复命令信息，减少处理时间
+    } else {
+      DEBUG_PRINTLN("设置模式：无效命令，忽略");
     }
     IrReceiver.resume();
     return;
   } else {
       // 非设置模式下的正常处理
-      Serial.print("0038k接收 - 协议:");
-      Serial.print(protocol);
-      Serial.print(" 地址:0x");
-      Serial.print(address, HEX);
-      Serial.print(" 命令:0x");
-      Serial.println(command, HEX);
-      
       // 验证地址
       if (address != IR_ADDRESS) {
-        Serial.println("address not equals,return");
+        DEBUG_PRINT("地址不匹配，期望:0x");
+        DEBUG_PRINTF("%X", IR_ADDRESS);
+        DEBUG_PRINT(" 实际:0x");
+        DEBUG_PRINTF("%X\n", address);
         IrReceiver.resume();
         return;
       }
+      
+      DEBUG_PRINTLN("地址匹配，处理命令");
     }
 
     unsigned long currentTime = millis();
@@ -421,17 +451,18 @@ void loop() {
     if (isValidIRCommand(command, protocol)) {
       // 电机运行时立即处理停止命令，否则使用防抖机制
       if (motorRunning && command == IR_KEY_SHUTDOWN) {
-        Serial.println("电机运行时接收到有效停止命令，立即处理");
+        DEBUG_PRINTLN("电机运行时接收到有效停止命令，立即处理");
         handleIRCommand(command);
         updateIRState(command, currentTime);
       } else if (shouldProcessCommand(command, currentTime, IR_DEBOUNCE_TIME)) {
+        DEBUG_PRINTLN("处理有效命令");
         handleIRCommand(command);
         updateIRState(command, currentTime);
       } else {
-        Serial.println("重复命令，已忽略");
+        DEBUG_PRINTLN("重复命令，已忽略");
       }
     } else {
-      Serial.println("无效信号，已忽略");
+      DEBUG_PRINTLN("无效信号，已忽略");
     }
     
     IrReceiver.resume();
@@ -445,12 +476,14 @@ void loop() {
   // 调试输出：在非设置模式下每30秒显示一次状态，设置模式下不输出
   static unsigned long lastDebugTime = 0;
   if (!setMode && millis() - lastDebugTime > 30000) {
-    DEBUG_PRINT("调试信息 - setMode: ");
+    DEBUG_PRINT("系统运行中 - setMode: ");
     DEBUG_PRINT(setMode ? "true" : "false");
     DEBUG_PRINT(", timingInProgress: ");
     DEBUG_PRINT(timingInProgress ? "true" : "false");
     DEBUG_PRINT(", motorRunning: ");
-    DEBUG_PRINTLN(motorRunning ? "true" : "false");
+    DEBUG_PRINT(motorRunning ? "true" : "false");
+    DEBUG_PRINT(", 等待红外信号...");
+    DEBUG_PRINTLN();
     lastDebugTime = millis();
   }
   
@@ -519,7 +552,7 @@ void rotateForTime(int duration, bool clockwise) {
           
           // 只有在接收到有效的停止信号时才停止（地址不为0x0，协议不为0）
           if (command == IR_KEY_SHUTDOWN && address != 0x0 && protocol != 0) {
-            Serial.println("旋转过程中接收到有效红外停止信号，立即停止");
+            DEBUG_PRINTLN("旋转过程中接收到有效红外停止信号，立即停止");
             stopRequested = true;
             IrReceiver.resume();
             break;
