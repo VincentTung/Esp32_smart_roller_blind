@@ -20,6 +20,13 @@
  #define ENABLE_PIN 8
  //红外
  #define IR_RECEIVE_PIN 9
+
+//RF引脚
+#define RF_D2_PIN 10  //rf  键1  控制窗帘打开
+#define RF_DO_PIN 1  //rf  键2  控制窗帘关闭
+
+
+ 
  
 //红外地址  （根据实际接收到的地址修改）
 #define IR_ADDRESS  0xBF00
