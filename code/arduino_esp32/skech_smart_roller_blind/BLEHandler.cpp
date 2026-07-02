@@ -13,10 +13,10 @@ ControlCharacteristicCallbacks::ControlCharacteristicCallbacks(BLEHandler* handl
 
 void ControlCharacteristicCallbacks::onWrite(BLECharacteristic *pCharacteristic) {
     Serial.println("=== BLE onWrite 回调被调用 ===");
-    std::string value = pCharacteristic->getValue();
+    String value = pCharacteristic->getValue();
     
     Serial.print("BLE接收到命令: ");
-    Serial.println(value.c_str());
+    Serial.println(value);
     Serial.print("命令长度: ");
     Serial.println(value.length());
     
@@ -29,7 +29,7 @@ void ControlCharacteristicCallbacks::onWrite(BLECharacteristic *pCharacteristic)
     }
 }
 
-void ControlCharacteristicCallbacks::handleBLECommand(std::string value) {
+void ControlCharacteristicCallbacks::handleBLECommand(const String& value) {
     if (bleHandler == nullptr) {
         Serial.println("BLE处理器为空");
         return;

@@ -40,7 +40,7 @@ public:
     void onWrite(BLECharacteristic *pCharacteristic);
     
 private:
-    void handleBLECommand(std::string value);
+    void handleBLECommand(const String& value);
 };
 
 // BLE服务器回调

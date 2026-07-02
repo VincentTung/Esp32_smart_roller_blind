@@ -11,8 +11,9 @@
  * 中间键 (0x5) - 停止电机 / 连续3次清除存储
  *  9键  (0x1A) - 切换电机转动方向
  */
+
+#include <IRremote.h>// 必须在 IRremote.h 之后，IRremote 会 #undef DEBUG_PRINT/DEBUG_PRINTLN
 #include "config.h"
-#include <IRremote.h>
 #include <EEPROM.h>
 #include "BLEHandler.h"
 
